@@ -1,0 +1,3 @@
+[submodule "thirdparty/fph-table"]
+	path = thirdparty/fph-table
+	url = git@github.com:renzibei/fph-table.git
