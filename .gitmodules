@@ -1,3 +1,9 @@
 [submodule "thirdparty/fph-table"]
 	path = thirdparty/fph-table
 	url = git@github.com:renzibei/fph-table.git
+[submodule "thirdparty/abseil-cpp"]
+	path = thirdparty/abseil-cpp
+	url = https://github.com/abseil/abseil-cpp.git
+[submodule "thirdparty/robin-hood-hashing"]
+	path = thirdparty/robin-hood-hashing
+	url = https://github.com/martinus/robin-hood-hashing.git
