@@ -7,3 +7,9 @@
 [submodule "thirdparty/robin-hood-hashing"]
 	path = thirdparty/robin-hood-hashing
 	url = https://github.com/martinus/robin-hood-hashing.git
+[submodule "thirdparty/ska_flat_hash_map"]
+	path = thirdparty/ska_flat_hash_map
+	url = https://github.com/skarupke/flat_hash_map.git
+[submodule "thirdparty/tsl-robin-map"]
+	path = thirdparty/tsl-robin-map
+	url = https://github.com/Tessil/robin-map.git

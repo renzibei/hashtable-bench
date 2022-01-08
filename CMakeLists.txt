@@ -18,6 +18,7 @@ find_package(Threads REQUIRED)
 
 add_subdirectory(thirdparty/fph-table)
 add_subdirectory(thirdparty/abseil-cpp)
+add_subdirectory(thirdparty/tsl-robin-map)
 
 foreach(MAP_DIR ${INC_SEED_MAPS})
     get_filename_component(MAP_NAME ${MAP_DIR} NAME_WE)

@@ -278,7 +278,7 @@ void ConstructRngPtr(std::unique_ptr<RNG>& key_rng_ptr, size_t seed, size_t max_
 }
 
 //using StatsTuple = std::tuple<double, double, double, double, double, double, double, double, double>;
-using StatsTuple = std::array<double, 10>;
+using StatsTuple = std::array<double, 12>;
 
 template<class ValueRandomGen, class Table, class value_type,
         class GetKey = SimpleGetKey<value_type>>
@@ -384,6 +384,30 @@ StatsTuple TestTablePerformance(size_t element_num, size_t construct_time, size_
                                                                                               lookup_vec, construct_seed, false);
     }
 
+    // generate a vector of value_type contains 50% of the keys in the map
+    std::vector<size_t> index_vec(element_num, 0);
+    for (size_t i = 0; i < element_num; ++i) {
+        index_vec[i] = i;
+    }
+    std::shuffle(index_vec.begin(), index_vec.end(), random_engine);
+    std::vector<mutable_value_type> may_in_lookup_vec;
+    may_in_lookup_vec.reserve(element_num);
+    size_t half_element_num = element_num / 2UL;
+    for (size_t i = 0; i < half_element_num; ++i) {
+        may_in_lookup_vec.push_back(src_vec[index_vec[i]]);
+    }
+    std::shuffle(index_vec.begin(), index_vec.end(), random_engine);
+    for (size_t i = half_element_num; i < element_num; ++i) {
+        may_in_lookup_vec.push_back(lookup_vec[index_vec[i]]);
+    }
+    uint64_t may_no_hash_lookup_ns = 0;
+    {
+        Table table;
+        std::tie(may_no_hash_lookup_ns, std::ignore) = TestTableLookUp<KEY_MAY_IN, false>(table, lookup_time, src_vec,
+                                                                                          may_in_lookup_vec, construct_seed, false);
+    }
+
+
     float with_rehash_load_factor = 0;
     uint64_t in_with_rehash_lookup_ns = 0, in_with_rehash_construct_ns = 0;
     {
@@ -401,6 +425,12 @@ StatsTuple TestTablePerformance(size_t element_num, size_t construct_time, size_
                                                                                             lookup_vec, construct_seed, true);
     }
 
+    uint64_t may_with_rehash_lookup_ns = 0, may_with_rehash_construct_ns = 0;
+    {
+        Table table;
+        std::tie(may_with_rehash_lookup_ns, may_with_rehash_construct_ns) = TestTableLookUp<KEY_MAY_IN, false>(table, lookup_time, src_vec,
+                                                                                               may_in_lookup_vec, construct_seed, true);
+    }
 
 
     uint64_t iterate_ns = 0, it_useless_sum = 0;
@@ -417,20 +447,23 @@ StatsTuple TestTablePerformance(size_t element_num, size_t construct_time, size_
     double avg_construct_time_without_reserve_ns = (double)total_no_reserve_construct_ns / (double)construct_time / (double)element_num;
     double avg_hit_without_rehash_lookup_ns = (double)in_no_rehash_lookup_ns / (double)lookup_time;
     double avg_miss_without_rehash_lookup_ns = (double)out_no_rehash_lookup_ns / (double)lookup_time;
+    double avg_may_without_rehash_lookup_ns = (double)may_no_hash_lookup_ns / (double)lookup_time;
     double avg_hit_with_rehash_lookup_ns = (double)in_with_rehash_lookup_ns  / (double)lookup_time;
-
     double avg_miss_with_rehash_lookup_ns = (double)out_with_rehash_lookup_ns / (double)lookup_time;
+    double avg_may_with_rehash_lookup_ns = (double)may_with_rehash_lookup_ns / (double)lookup_time;
     double avg_iterate_ns = (double)iterate_ns / double(iterate_time * element_num);
-    double avg_final_rehash_construct_ns = (double)(in_with_rehash_construct_ns + out_with_rehash_construct_ns) / (double)(element_num * 2ULL);
+    double avg_final_rehash_construct_ns = (double)(in_with_rehash_construct_ns + out_with_rehash_construct_ns + may_with_rehash_construct_ns) / (double)(element_num * 3ULL);
 
-    fprintf(stderr, "%s %lu elements, sizeof(value_type)=%lu, construct with reserve avg use %.6f s,"
-                    "construct without reserve avg use %.6f s, "
-                    "no rehash normal construct got load_factor: %.6f, "
-                    "with rehash after construct got load_factor: %.6f, "
-                    "look up key hit without rehash use %.3f ns per key,"
-                    "look up miss without rehash use %.3f ns per key, "
-                    "look up key hit with rehash use %.3f ns per key,"
-                    "look up miss with rehash use %.3f ns per key, "
+    fprintf(stderr, "%s %lu elements, sizeof(pair)=%lu, insert with reserve avg use %.6f s,"
+                    "insert without reserve avg use %.6f s, "
+                    "no rehash construct got load_factor: %.6f, "
+                    "with rehash construct got load_factor: %.6f, "
+                    "lookup hit no rehash use %.3f ns,"
+                    "lookup miss no rehash use %.3f ns, "
+                    "lookup 50%% hit no rehash use %.3f ns, "
+                    "lookup hit with rehash use %.3f ns,"
+                    "lookup miss with rehash use %.3f ns, "
+                    "lookup 50%% hit with rehash use %.3f ns, "
                     "iterate use %.3f ns per value, "
                     "with_final_rehash_construct_time: %.3f s\n",
                 MAP_NAME, element_num, sizeof(value_type),
@@ -439,16 +472,18 @@ StatsTuple TestTablePerformance(size_t element_num, size_t construct_time, size_
                 no_rehash_load_factor, with_rehash_load_factor,
                 (double)in_no_rehash_lookup_ns / (double)lookup_time,
                 (double)out_no_rehash_lookup_ns / (double)lookup_time,
+                (double)may_no_hash_lookup_ns / (double)lookup_time,
                 (double)in_with_rehash_lookup_ns  / (double)lookup_time,
                 (double)out_with_rehash_lookup_ns / (double)lookup_time,
+                (double)may_with_rehash_lookup_ns / (double)lookup_time,
                 (double)iterate_ns / double(iterate_time * element_num),
-                double(in_with_rehash_construct_ns + out_with_rehash_lookup_ns) / (1e+9) / 2.0
+                double(in_with_rehash_construct_ns + out_with_rehash_lookup_ns + may_with_rehash_construct_ns) / (1e+9) / 3.0
             );
 
     return {avg_construct_time_with_reserve_ns, avg_construct_time_without_reserve_ns,
             no_rehash_load_factor, with_rehash_load_factor,
-            avg_hit_without_rehash_lookup_ns, avg_miss_without_rehash_lookup_ns,
-            avg_hit_with_rehash_lookup_ns, avg_miss_with_rehash_lookup_ns,
+            avg_hit_without_rehash_lookup_ns, avg_miss_without_rehash_lookup_ns, avg_may_without_rehash_lookup_ns,
+            avg_hit_with_rehash_lookup_ns, avg_miss_with_rehash_lookup_ns, avg_may_with_rehash_lookup_ns,
             avg_iterate_ns, avg_final_rehash_construct_ns
             };
 
@@ -722,7 +757,9 @@ void ExportToCsv(FILE* export_fp, const std::vector<size_t>& element_num_vec, co
     const char* csv_header = "element_num,avg_construct_time_with_reserve_ns,avg_construct_time_without_reserve_ns,"
                              "no_rehash_load_factor,with_rehash_load_factor,"
                              "avg_hit_without_rehash_lookup_ns,avg_miss_without_rehash_lookup_ns,"
+                             "avg_50%_hit_without_rehash_lookup_ns,"
                              "avg_hit_with_rehash_lookup_ns,avg_miss_with_rehash_lookup_ns,"
+                             "avg_50%_hit_with_rehash_lookup_ns,"
                              "avg_iterate_ns,avg_with_final_rehash_construct_ns";
     fprintf(export_fp, "%s\n", csv_header);
     if (element_num_vec.size() != result_vec.size()) {
