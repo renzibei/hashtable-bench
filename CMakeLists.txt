@@ -3,7 +3,14 @@ project(hashtable_bench)
 
 set(CMAKE_CXX_STANDARD 17)
 set(ABSL_PROPAGATE_CXX_STD 17)
-#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Wno-format")
+
+set(MEMCHECK_FLAGS "-fsanitize=address -fno-omit-frame-pointer -fno-optimize-sibling-calls")
+set(MEMCHECK_FLAGS "")
+
+if (NOT MSVC)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra ${MEMCHECK_FLAGS}")
+endif()
+
 
 file(GLOB INC_HASHES "src/hashes/*")
 file(GLOB INC_MAPS "src/maps/*")
