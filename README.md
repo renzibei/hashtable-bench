@@ -1,6 +1,6 @@
 # Hash Table Benchmark
 
-This is yet another benchmark for evaluating hash tables(hash maps) with different hash functions in C++, attempting to 
+This is yet another benchmark for hash tables(hash maps) with different hash functions in C++, attempting to 
 evaluate the performance of the lookup, insertion, deletion, iteration, etc. on different data as comprehensively as possible.
 
 ## Before viewing the results
@@ -174,33 +174,33 @@ Platform 2: M1 Max Macbook Pro 16 inch, 2021; 64 GB LPDDR5 RAM; macOS 12.1; clan
 
 #### Look up keys in the map with large max_load_factor
 
-![fig1](./results/show/3990x/figs/<mask_split_bits_uint64_t,uint64_t>, avg_hit_find_with_rehash.png)
+![fig1](./results/show/3990x/figs/<mask_split_bits_uint64_t,uint64_t>,avg_hit_find_with_rehash.png)
 
 <center>Figure 1: Look up keys in the map with 0.9 max_load_factor, tested in AMD 3990x</center>
 
 
 
-![fig2](./results/show/m1-max/figs/<mask_split_bits_uint64_t,uint64_t>, avg_hit_find_with_rehash.png) 
+![fig2](./results/show/m1-max/figs/<mask_split_bits_uint64_t,uint64_t>,avg_hit_find_with_rehash.png) 
 
 <center>Figure 2: Look up keys in the map with 0.9 max_load_factor, tested in Apple M1 Max</center>
 
 #### Lookup keys in the map with default max_load_factor
 
-![fig3](./results/show/3990x/figs/<mask_split_bits_uint64_t,uint64_t>, avg_hit_find_without_rehash.png)
+![fig3](./results/show/3990x/figs/<mask_split_bits_uint64_t,uint64_t>,avg_hit_find_without_rehash.png)
 
 <center>Figure 3: Look up keys in the map with default max_load_factor, tested in AMD 3990x</center>
 
-![fig4](./results/show/m1-max/figs/<mask_split_bits_uint64_t,uint64_t>, avg_hit_find_without_rehash.png)
+![fig4](./results/show/m1-max/figs/<mask_split_bits_uint64_t,uint64_t>,avg_hit_find_without_rehash.png)
 
 <center>Figure 4: Look up keys in the map with default max_load_factor, tested in Apple M1 Max</center>
 
 #### Look up keys that are not in the map with large max_load_factor
 
-![fig5](./results/show/3990x/figs/<mask_split_bits_uint64_t,uint64_t>, avg_miss_find_with_rehash.png)
+![fig5](./results/show/3990x/figs/<mask_split_bits_uint64_t,uint64_t>,avg_miss_find_with_rehash.png)
 
 <center>Figure 5: Look up keys that are not in the map with 0.9 max_load_factor, tested in AMD 3990x</center>
 
-![fig6](./results/show/m1-max/figs/<mask_split_bits_uint64_t,uint64_t>, avg_miss_find_with_rehash.png)
+![fig6](./results/show/m1-max/figs/<mask_split_bits_uint64_t,uint64_t>,avg_miss_find_with_rehash.png)
 
 <center>Figure 6: Look up keys that are not in the map with 0.9 max_load_factor, tested in Apple M1 Max</center>
 
@@ -259,11 +259,11 @@ other hash tables.
 
 #### Insert with reserve
 
-![fig7](./results/show/3990x/figs/<mask_split_bits_uint64_t,uint64_t>, avg_insert_time_with_reserve.png)
+![fig7](./results/show/3990x/figs/<mask_split_bits_uint64_t,uint64_t>,avg_insert_time_with_reserve.png)
 
 <center>Figure 7: Insert keys into the map with a prior reserve, tested in AMD 3990x</center>
 
-![fig8](./results/show/m1-max/figs/<mask_split_bits_uint64_t,uint64_t>, avg_insert_time_with_reserve.png)
+![fig8](./results/show/m1-max/figs/<mask_split_bits_uint64_t,uint64_t>,avg_insert_time_with_reserve.png)
 
 <center>Figure 8: Insert keys into the map with a prior reserve, tested in Apple M1 Max</center>
 
@@ -274,11 +274,11 @@ or `robin_hood::hash`).
 
 #### Erase and insert
 
-![fig9](./results/show/3990x/figs/<mask_split_bits_uint64_t,uint64_t>, avg_erase_insert_time.png)
+![fig9](./results/show/3990x/figs/<mask_split_bits_uint64_t,uint64_t>,avg_erase_insert_time.png)
 
 <center>Figure 9: Erase and Insert keys, tested in AMD 3990x</center>
 
-![fig10](./results/show/m1-max/figs/<mask_split_bits_uint64_t,uint64_t>, avg_erase_insert_time.png)
+![fig10](./results/show/m1-max/figs/<mask_split_bits_uint64_t,uint64_t>,avg_erase_insert_time.png)
 
 <center>Figure 10: Erase and Insert keys, tested in Apple M1 Max</center>
 
@@ -287,11 +287,11 @@ elements. `tsl::robin_map` performs almost as well with more than 1000 elements.
 
 #### Iterate
 
-![fig11](./results/show/3990x/figs/<mask_split_bits_uint64_t,uint64_t>, avg_iterate.png)
+![fig11](./results/show/3990x/figs/<mask_split_bits_uint64_t,uint64_t>,avg_iterate.png)
 
 <center>Figure 11: Iterate the table, tested in AMD 3990x</center>
 
-![fig12](./results/show/m1-max/figs/<mask_split_bits_uint64_t,uint64_t>, avg_iterate.png)
+![fig12](./results/show/m1-max/figs/<mask_split_bits_uint64_t,uint64_t>,avg_iterate.png)
 
 <center>Figure 12: Iterate the table, tested in Apple M1 Max</center>
 
@@ -309,11 +309,11 @@ Due to space limitations, comprehensive results are not presented in this docume
 
 #### Look up keys in the map with large max_load_factor
 
-![fig13](./results/show/3990x/figs/<mask_split_bits_uint64_t,56bytes_payload>, avg_hit_find_with_rehash.png)
+![fig13](./results/show/3990x/figs/<mask_split_bits_uint64_t,56bytes_payload>,avg_hit_find_with_rehash.png)
 
 <center>Figure 13: Look up keys in the map with 0.9 max_load_factor, tested in AMD 3990x</center>
 
-![fig14](./results/show/m1-max/figs/<mask_split_bits_uint64_t,56bytes_payload>, avg_hit_find_with_rehash.png)
+![fig14](./results/show/m1-max/figs/<mask_split_bits_uint64_t,56bytes_payload>,avg_hit_find_with_rehash.png)
 
 <center>Figure 14: Look up keys in the map with 0.9 max_load_factor, tested in Apple M1 Max</center>
 
@@ -328,11 +328,11 @@ the number of elements.
 
 #### Look up keys in the map with large max_load_factor
 
-![fig15](./results/show/3990x/figs/<small_string_max_12,uint64_t>, avg_hit_find_with_rehash.png)
+![fig15](./results/show/3990x/figs/<small_string_max_12,uint64_t>,avg_hit_find_with_rehash.png)
 
 <center>Figure 15: Look up keys in the map with 0.9 max_load_factor, tested in AMD 3990x</center>
 
-![fig16](./results/show/m1-max/figs/<small_string_max_12,uint64_t>, avg_hit_find_with_rehash.png)
+![fig16](./results/show/m1-max/figs/<small_string_max_12,uint64_t>,avg_hit_find_with_rehash.png)
 
 <center>Figure 16: Look up keys in the map with 0.9 max_load_factor, tested in Apple M1 Max</center>
 
@@ -357,11 +357,11 @@ results in more strings with longer lengths than strings with shorter lengths.
 
 #### Look up keys in the map with large max_load_factor
 
-![fig17](./results/show/3990x/figs/<small_string_fix_12,uint64_t>, avg_hit_find_with_rehash.png)
+![fig17](./results/show/3990x/figs/<small_string_fix_12,uint64_t>,avg_hit_find_with_rehash.png)
 
 <center>Figure 17: Look up keys in the map with 0.9 max_load_factor, tested in AMD 3990x</center>
 
-![fig18](./results/show/m1-max/figs/<small_string_fix_12,uint64_t>, avg_hit_find_with_rehash.png)
+![fig18](./results/show/m1-max/figs/<small_string_fix_12,uint64_t>,avg_hit_find_with_rehash.png)
 
 <center>Figure 18: Look up keys in the map with 0.9 max_load_factor, tested in Apple M1 Max</center>
 
@@ -395,7 +395,7 @@ inline uint64_t Hash12Bytes(const void* src, size_t seed) {
 
 Figure 19 compares the lookup performance of this hash function and `xxHash_xxh3` when used with `fph::DynamicFphMap`. 
 
-![fig19](./results/show/3990x/fix_12_string/figs/<small_string_fix_12,uint64_t>, avg_hit_find_with_rehash.png)
+![fig19](./results/show/3990x/fix_12_string/figs/<small_string_fix_12,uint64_t>,avg_hit_find_with_rehash.png)
 
 <center>Figure 19: Look up keys in the map with 0.9 max_load_factor, tested in AMD 3990x</center>
 
@@ -409,11 +409,11 @@ optimized hash function should be provided for the hash table.
 
 #### Look up keys in the map with large max_load_factor
 
-![fig20](./results/show/3990x/figs/<mid_string_max_56,uint64_t>, avg_hit_find_with_rehash.png)
+![fig20](./results/show/3990x/figs/<mid_string_max_56,uint64_t>,avg_hit_find_with_rehash.png)
 
 <center>Figure 20: Look up keys in the map with 0.9 max_load_factor, tested in AMD 3990x</center>
 
-![fig21](./results/show/m1-max/figs/<mid_string_max_56,uint64_t>, avg_hit_find_with_rehash.png)
+![fig21](./results/show/m1-max/figs/<mid_string_max_56,uint64_t>,avg_hit_find_with_rehash.png)
 
 <center>Figure 21: Look up keys in the map with 0.9 max_load_factor, tested in Apple M1 Max</center>
 
@@ -436,11 +436,11 @@ sets should be tested to obtain accurate results.
 
 #### Look up keys in the map with large max_load_factor
 
-![fig22](./results/show/3990x/figs/<mid_string_fix_56,uint64_t>, avg_hit_find_with_rehash.png)
+![fig22](./results/show/3990x/figs/<mid_string_fix_56,uint64_t>,avg_hit_find_with_rehash.png)
 
 <center>Figure 22: Look up keys in the map with 0.9 max_load_factor, tested in AMD 3990x</center>
 
-![fig23](./results/show/m1-max/figs/<mid_string_fix_56,uint64_t>, avg_hit_find_with_rehash.png)
+![fig23](./results/show/m1-max/figs/<mid_string_fix_56,uint64_t>,avg_hit_find_with_rehash.png)
 
 <center>Figure 23: Look up keys in the map with 0.9 max_load_factor, tested in Apple M1 Max</center>
 
