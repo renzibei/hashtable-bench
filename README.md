@@ -93,6 +93,7 @@ Use CMake to make the targets
 mkdir build
 cd build
 cmake .. -DCMAKE_BUILD_TYPE=Release # (default: -DBENCH_ONLY_INT=OFF -DBENCH_ONLY_STRING=OFF)
+make -j8
 ```
 
 Use the python script provided to run all the tests in the benchmark
