@@ -8,6 +8,7 @@
 
 
 
+
 #ifndef FPH_HAVE_BUILTIN
 #ifdef __has_builtin
 #define FPH_HAVE_BUILTIN(x) __has_builtin(x)
@@ -48,6 +49,11 @@
 #define BENCH_OS_WIN
 #include <windows.h>  // NOLINT
 #endif
+
+#if defined(__APPLE__)
+#define BENCH_OS_X
+#endif
+
 
 // from absl
 // Prevents the compiler from eliding the computations that led to "output".
@@ -144,22 +150,9 @@ bool ConstructTable(Table &table, const PairVec &pair_vec, bool do_reserve = tru
     if (do_reserve) {
         table.reserve(pair_vec.size());
     }
-//    constexpr int64_t timeout_threshold_ns_per = 100000LL; // 100 us
-//    const int64_t total_timeout_threshold_ns = timeout_threshold_ns_per * pair_vec.size();
-//    auto begin_time = std::chrono::high_resolution_clock::now();
     for (size_t i = 0; i < pair_vec.size();) {
         const auto &pair = pair_vec[i++];
         table.insert(pair);
-//        if FPH_UNLIKELY(!(i & 0xffULL)) {
-//            auto temp_time = std::chrono::high_resolution_clock::now();
-//            auto temp_pass_ns = std::chrono::duration_cast<std::chrono::nanoseconds>
-//                    (temp_time - begin_time).count();
-//            if FPH_UNLIKELY(temp_pass_ns > total_timeout_threshold_ns) {
-//                fprintf(stderr, "Timeout in construct table, %.3f ns per insert in the initial test",
-//                        double(temp_pass_ns) / double(i));
-//                return false;
-//            }
-//        }
     }
     if (do_rehash) {
         if (table.load_factor() < 0.45) {
@@ -175,24 +168,12 @@ bool ConstructTable(Table &table, const PairVec &pair_vec, bool do_reserve = tru
 template<bool do_reserve = true, bool verbose = true, class Table, class PairVec,
         class GetKey = SimpleGetKey<typename PairVec::value_type>>
 uint64_t TestTableConstruct(Table &table, const PairVec &pair_vec) {
-//    constexpr int64_t timeout_threshold_ns_per = 100000LL; // 100 us
-//    const int64_t total_timeout_threshold_ns = timeout_threshold_ns_per * pair_vec.size();
     auto begin_time = std::chrono::high_resolution_clock::now();
     if constexpr (do_reserve) {
         table.reserve(pair_vec.size());
     }
     for (size_t i = 0; i < pair_vec.size();) {
         table.insert(pair_vec[i++]);
-//        if FPH_UNLIKELY(!(i & 0xffUL)) {
-//            auto temp_time = std::chrono::high_resolution_clock::now();
-//            auto temp_pass_ns = std::chrono::duration_cast<std::chrono::nanoseconds>
-//                                    (temp_time - begin_time).count();
-//            if FPH_UNLIKELY(temp_pass_ns > total_timeout_threshold_ns) {
-//                fprintf(stderr, "Timeout in test table insert, %.3f ns per insert in the initial test",
-//                        double(temp_pass_ns) / double(i));
-//                return 0;
-//            }
-//        }
     }
     auto end_time = std::chrono::high_resolution_clock::now();
     auto pass_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(end_time - begin_time).count();
@@ -217,7 +198,6 @@ std::tuple<uint64_t> TestTableEraseAndInsertImp(const PairVec& src_vec, ValueGen
     using value_type = typename MutableValue<typename Table::value_type>::type;
     std::vector<value_type> element_vec(table.begin(), table.end());
     size_t cur_cnt = element_vec.size();
-//    const size_t total_op_cnt = erase_time * 2ULL;
 
     std::minstd_rand uint_engine(seed);
     std::uniform_int_distribution<size_t> rand_dis;
@@ -226,11 +206,7 @@ std::tuple<uint64_t> TestTableEraseAndInsertImp(const PairVec& src_vec, ValueGen
     for (size_t t = 0; t < erase_time; ++t) {
         size_t_vec[t] = rand_dis(uint_engine) % cur_cnt;
     }
-//    assert(new_vec.size() >= erase_time);
-//    const size_t must_insert_low_bound = std::min(cur_cnt - 1UL, size_t(double(cur_cnt) * 0.9));
-//    const size_t must_erase_up_bound = std::max(cur_cnt + 1UL, size_t(double(cur_cnt) * 1.1));
     const size_t most_possible_insert_cnt = erase_time;
-//    const size_t most_possible_insert_cnt = must_erase_up_bound - cur_cnt + total_op_cnt + 1UL;
     std::vector<value_type> new_vec;
     new_vec.reserve(most_possible_insert_cnt);
     for (size_t i = 0; i < most_possible_insert_cnt; ++i) {
@@ -238,8 +214,6 @@ std::tuple<uint64_t> TestTableEraseAndInsertImp(const PairVec& src_vec, ValueGen
     }
     element_vec.template emplace_back(miss_value_gen());
 
-//    size_t to_insert_index = 0;
-//    size_t to_erase_index = 0;
     auto start_t = std::chrono::high_resolution_clock::now();
     for (size_t t = 0; t < erase_time; ++t) {
 
@@ -249,24 +223,8 @@ std::tuple<uint64_t> TestTableEraseAndInsertImp(const PairVec& src_vec, ValueGen
             size_t erase_index = size_t_vec[t];
             table.erase(GetKey{}(element_vec[erase_index]));
             element_vec[erase_index] = new_vec[t];
-//            std::swap(element_vec[erase_index], element_vec[cur_cnt]);
         }
     }
-//    for (size_t t = 0; t < total_op_cnt; ++t) {
-//        size_t temp_rand_int = size_t_vec[t];
-//        if (((temp_rand_int & 1UL) & (cur_cnt > must_insert_low_bound)) || (cur_cnt >= must_erase_up_bound)) {
-//            size_t erase_index = temp_rand_int % cur_cnt;
-//            table.erase(GetKey{}(element_vec[erase_index]));
-//            std::swap(element_vec[erase_index], element_vec[cur_cnt - 1UL]);
-//            --cur_cnt;
-//            element_vec.pop_back();
-//        }
-//        else {
-//            ++cur_cnt;
-//            element_vec.push_back(new_vec[to_insert_index++]);
-//            table.insert(element_vec.back());
-//        }
-//    }
     auto end_t = std::chrono::high_resolution_clock::now();
     uint64_t pass_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(end_t - start_t).count();
     return {pass_ns};
@@ -328,8 +286,8 @@ std::tuple<uint64_t, uint64_t> TestTableLookUp(Table &table, size_t lookup_time,
 
 //    size_t test_timeout_cnt = 0;
     {
-        constexpr int64_t per_find_timeout_threshold_ns = 500LL; // 500 ns per call
-        const size_t timeout_test_lookup_cnt = 50000LL;
+        constexpr int64_t per_find_timeout_threshold_ns = 1500LL; // 1500 ns per call
+        const size_t timeout_test_lookup_cnt = 100000LL;
         const int64_t total_timeout_threshold_ns = per_find_timeout_threshold_ns * timeout_test_lookup_cnt;
 
         auto timeout_test_start_t = std::chrono::high_resolution_clock::now();
@@ -477,8 +435,13 @@ StatsTuple TestTablePerformance(size_t element_num, size_t construct_time, size_
     size_t construct_seed = size_gen(random_engine);
     size_t total_reserve_construct_ns = 0;
 
+    // Test insert with reserve
     try {
+#ifdef BENCH_ONLY_STRING
+        constexpr uint64_t timeout_threshold_ns_per_insert = 80'000ULL; // 80 us
+#else
         constexpr uint64_t timeout_threshold_ns_per_insert = 20'000ULL; // 20 us
+#endif
         size_t insert_cnt_sum = 0;
         for (size_t t = 0; t < construct_time; ++t) {
             Table table;
@@ -500,6 +463,7 @@ StatsTuple TestTablePerformance(size_t element_num, size_t construct_time, size_
         total_reserve_construct_ns = 0;
     }
 
+    // test insert without reserve
     size_t total_no_reserve_construct_ns = 0;
     try {
         constexpr uint64_t timeout_threshold_ns_per_insert = 20'000ULL; // 20 us
@@ -547,6 +511,7 @@ StatsTuple TestTablePerformance(size_t element_num, size_t construct_time, size_
         lookup_vec.push_back(temp_pair);
     }
 
+    // test erase and insert
     uint64_t erase_and_insert_ns = 0;
     {
         if (timeout_flag_arr[check_timeout_index_arr[0]]) {
@@ -561,9 +526,9 @@ StatsTuple TestTablePerformance(size_t element_num, size_t construct_time, size_
     }
 
 
+    // test lookup keys in the map
     float no_rehash_load_factor = 0;
     uint64_t in_no_rehash_lookup_ns = 0;
-
     {
         if (timeout_flag_arr[check_timeout_index_arr[1]]) {
             fprintf(stderr, "%s hit no rehash find test already timeout, not test\n", MAP_NAME);
@@ -580,7 +545,7 @@ StatsTuple TestTablePerformance(size_t element_num, size_t construct_time, size_
 
 
 
-
+    // test lookup keys not in the map
     uint64_t out_no_rehash_lookup_ns = 0;
     {
         if (timeout_flag_arr[check_timeout_index_arr[2]]) {
@@ -593,6 +558,7 @@ StatsTuple TestTablePerformance(size_t element_num, size_t construct_time, size_
         }
     }
 
+    // test look up keys, 50% of which are in the map
     // generate a vector of value_type contains 50% of the keys in the map
     std::vector<size_t> index_vec(element_num, 0);
     for (size_t i = 0; i < element_num; ++i) {
@@ -622,7 +588,7 @@ StatsTuple TestTablePerformance(size_t element_num, size_t construct_time, size_
     }
 
 
-
+    // test look up keys in the map with larger max_load_factor
     float with_rehash_load_factor = 0;
     uint64_t in_with_rehash_lookup_ns = 0, in_with_rehash_construct_ns = 0;
     {
@@ -639,6 +605,7 @@ StatsTuple TestTablePerformance(size_t element_num, size_t construct_time, size_
 
     }
 
+    // test lookup keys not in the map with larger max_load_factor
     uint64_t out_with_rehash_lookup_ns = 0, out_with_rehash_construct_ns = 0;
     {
         if (timeout_flag_arr[check_timeout_index_arr[5]]) {
@@ -652,6 +619,7 @@ StatsTuple TestTablePerformance(size_t element_num, size_t construct_time, size_
 
     }
 
+    // test lookup keys 50% of which are in the map, with larger max_load_factor
     uint64_t may_with_rehash_lookup_ns = 0, may_with_rehash_construct_ns = 0;
     {
         if (timeout_flag_arr[check_timeout_index_arr[6]]) {
@@ -665,9 +633,9 @@ StatsTuple TestTablePerformance(size_t element_num, size_t construct_time, size_
 
     }
 
-
+    // test iterate time
     uint64_t iterate_ns = 0, it_useless_sum = 0;
-    uint64_t iterate_time = (lookup_time + element_num - 1) / element_num / 4UL;
+    uint64_t iterate_time = (lookup_time + element_num - 1) / element_num;
     {
 
         Table table;
@@ -675,6 +643,7 @@ StatsTuple TestTablePerformance(size_t element_num, size_t construct_time, size_
                 std::vector<mutable_value_type>, GetKey>(
                 table, lookup_time / element_num, src_vec);
     }
+
 
     double avg_construct_time_with_reserve_ns = (double)total_reserve_construct_ns / (double)construct_time / (double)element_num;
     double avg_construct_time_without_reserve_ns = (double)total_no_reserve_construct_ns / (double)construct_time / (double)element_num;
@@ -757,8 +726,9 @@ protected:
 
 enum KeyBitsPattern{
     UNIFORM = 0,
-    MASK_LOW_BITS ,
+    MASK_LOW_BITS,
     MASK_HIGH_BITS,
+    MASK_SPLIT_BITS,
 };
 
 
@@ -775,6 +745,9 @@ public:
         }
         else if constexpr(key_pattern == MASK_HIGH_BITS) {
             mask = fph::dynamic::detail::GenBitMask<uint64_t>(mask_len);
+        }
+        else if constexpr(key_pattern == MASK_SPLIT_BITS) {
+            mask = GenSplitMask(mask_len);
         }
 
     }
@@ -801,7 +774,7 @@ public:
     uint64_t operator()() {
         auto ret = random_gen(random_engine);
 
-        if constexpr(key_pattern == MASK_HIGH_BITS || key_pattern == MASK_LOW_BITS) {
+        if constexpr(key_pattern == MASK_HIGH_BITS || key_pattern == MASK_LOW_BITS || key_pattern == MASK_SPLIT_BITS) {
             ret &= mask;
         }
         return ret;
@@ -819,9 +792,24 @@ protected:
     std::uniform_int_distribution<uint64_t> random_gen;
     uint64_t mask;
 
+    static size_t GenSplitMask(size_t need_digits) {
+        constexpr size_t full_digits = std::numeric_limits<size_t>::digits;
+        size_t padding_time = need_digits > 0UL ? need_digits - 1UL : 0UL;
+        size_t padding_digits = full_digits - need_digits;
+        size_t per_padding_digits = padding_digits  / padding_time;
+        size_t has_padding_digits = 0UL;
+        size_t mask = need_digits > 0UL ? 1UL : 0UL;
+        for (size_t i = 0; i < padding_time; ++i) {
+            size_t this_padding_digits = (i + 1UL == padding_time ? (padding_digits - has_padding_digits) : per_padding_digits);
+            mask = (mask << (this_padding_digits + 1UL)) | 1UL;
+            has_padding_digits += this_padding_digits;
+        }
+        return mask;
+    }
+
 };
 
-template<size_t max_len>
+template<size_t max_len, bool fix_length = false>
 class StringRNG {
 public:
 
@@ -853,14 +841,34 @@ public:
         return ret;
     }
 
+    template<size_t length>
+    std::string RandomGenStr() {
+        static constexpr char alphanum[] =
+                "0123456789"
+                "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+                "abcdefghijklmnopqrstuvwxyz";
+        std::string ret(length, 0);
+        for (size_t i = 0; i < length; ++i) {
+            ret[i] = alphanum[random_gen(random_engine) % (sizeof(alphanum) - 1)];
+        }
+        return ret;
+    }
+
+
     /**
      * random generate a string consists of alpha num with random length from [1, 10]
      * @return
      */
     std::string operator()() {
         // TODO: change default size to bigger number if needed
-        size_t random_len = 1UL + random_gen(random_engine) % max_len;
-        return (*this)(random_len);
+
+        if constexpr (fix_length) {
+            return RandomGenStr<max_len>();
+        }
+        else {
+            size_t random_len = 1UL + random_gen(random_engine) % max_len;
+            return (*this)(random_len);
+        }
     }
 
     void seed(uint64_t seed = 0) {
@@ -1082,6 +1090,7 @@ auto TestOnePairType( size_t seed, const std::vector<size_t>& key_size_array) {
 //void TestRNG() {
 //    using MaskHighBitsUint64RNG = MaskedUint64RNG<MASK_HIGH_BITS>;
 //    using MaskLowBitsUint64RNG = MaskedUint64RNG<MASK_LOW_BITS>;
+//    using MaskSplitBitsUint64RNG = MaskedUint64RNG<MASK_SPLIT_BITS>;
 ////    using UniformUint64RNG = MaskedUint64RNG<UNIFORM>;
 //
 //    fprintf(stderr, "Mask low bits 16 bit\n");
@@ -1098,6 +1107,12 @@ auto TestOnePairType( size_t seed, const std::vector<size_t>& key_size_array) {
 //    }
 //    fprintf(stderr, "\n");
 //
+//    MaskSplitBitsUint64RNG split_rng(0, 100000000ULL);
+//    fprintf(stderr, "Mask mid split bits\n");
+//    for (int i = 0; i < 32; ++i) {
+//        fprintf(stderr, "%lx, ", split_rng());
+//    }
+//    fprintf(stderr, "\n");
 //
 //}
 
@@ -1130,11 +1145,16 @@ void ExportToCsv(FILE* export_fp, const std::vector<size_t>& element_num_vec, co
     fclose(export_fp);
 }
 
+
 void BenchTest(size_t seed, const char* data_dir) {
 //    TestRNG();
+    using UniformUint64RNG = MaskedUint64RNG<UNIFORM>;
+#ifndef BENCH_ONLY_STRING
     using MaskHighBitsUint64RNG = MaskedUint64RNG<MASK_HIGH_BITS>;
     using MaskLowBitsUint64RNG = MaskedUint64RNG<MASK_LOW_BITS>;
-    using UniformUint64RNG = MaskedUint64RNG<UNIFORM>;
+    using MaskSplitBitsUint64RNG = MaskedUint64RNG<MASK_SPLIT_BITS>;
+
+#endif
 
 
     std::string map_name = std::string(MAP_NAME);
@@ -1142,106 +1162,213 @@ void BenchTest(size_t seed, const char* data_dir) {
     std::string data_dir_path = std::string(data_dir) + PathSeparator();
 
 
+
+
     std::vector<size_t> key_size_array = {
-            32UL, 110UL, 240UL, 500UL, 800UL,
+                                    32UL,
+                                    110UL, 240UL, 500UL, 800UL,
                                           1024UL, 1500UL,
-            2048UL, 3000UL, 6000UL,
+                                    2048UL, 3000UL, 6000UL,
                                             8192UL, 12000UL,16384UL, 25000UL,
                                           32768UL, 45000UL, 60000UL,
-                                          100000UL, 200000UL, 400000UL, 600000UL, 800000UL, 1200000UL,
-                                          2200000UL, 3100000UL, 6000000UL, 10000000UL};
+                                          100000UL, 150000UL, 200000UL, 300000UL, 400000UL, 600000UL,
+                                          800000UL, 1200000UL,
+                                          2200000UL, 3100000UL, 6000000UL,
+                                          10000000UL};
 
     fprintf(stderr, "\n------ Begin to test hash %s with map %s ---\n", HASH_NAME, MAP_NAME);
 
     {
 
+#ifndef BENCH_ONLY_STRING
 
 
 
-        fprintf(stderr, "\nTest Low bits masked uint64 key\n\n");
-        std::string data_file_name = map_name + "__" + hash_name + "__" + "mask_low_bits_uint64_t" + "__" + "uint64_t" + ".csv";
-        std::string export_file_path = data_dir_path + data_file_name;
-        FILE *export_fp = fopen(export_file_path.c_str(), "w");
-        if (export_fp == nullptr) {
-            fprintf(stderr, "Error when create file at %s\n%s\n", export_file_path.c_str(), std::strerror(errno));
-            return;
+        {
+            fprintf(stderr, "\nTest Mid split bits masked distributed uint64 key\n\n");
+            std::string data_file_name =
+                    map_name + "__" + hash_name + "__" + "mask_split_bits_uint64_t" + "__" + "uint64_t" +
+                    ".csv";
+            std::string export_file_path = data_dir_path + data_file_name;
+            FILE *export_fp = fopen(export_file_path.c_str(), "w");
+            if (export_fp == nullptr) {
+                fprintf(stderr, "Error when create file at %s\n%s", export_file_path.c_str(),
+                        std::strerror(errno));
+                return;
+            }
+            auto result_vec = TestOnePairType<uint64_t, uint64_t, MaskSplitBitsUint64RNG, UniformUint64RNG>(
+                    seed, key_size_array);
+            ExportToCsv(export_fp, key_size_array, result_vec);
         }
-        auto result_vec = TestOnePairType<uint64_t, uint64_t, MaskLowBitsUint64RNG, UniformUint64RNG>(seed, key_size_array);
-        ExportToCsv(export_fp, key_size_array, result_vec);
+
+        {
+            fprintf(stderr, "\nTest Uniformly distributed uint64 key\n\n");
+            std::string data_file_name =
+                    map_name + "__" + hash_name + "__" + "uniform_uint64_t" + "__" + "uint64_t" +
+                    ".csv";
+            std::string export_file_path = data_dir_path + data_file_name;
+            FILE *export_fp = fopen(export_file_path.c_str(), "w");
+            if (export_fp == nullptr) {
+                fprintf(stderr, "Error when create file at %s\n%s", export_file_path.c_str(),
+                        std::strerror(errno));
+                return;
+            }
+            auto result_vec = TestOnePairType<uint64_t, uint64_t, UniformUint64RNG, UniformUint64RNG>(
+                    seed, key_size_array);
+            ExportToCsv(export_fp, key_size_array, result_vec);
+        }
+
+        {
+            fprintf(stderr, "\nTest High bits masked uint64 key\n\n");
+            std::string data_file_name =
+                    map_name + "__" + hash_name + "__" + "mask_high_bits_uint64_t" + "__" +
+                    "uint64_t" + ".csv";
+            std::string export_file_path = data_dir_path + data_file_name;
+            FILE *export_fp = fopen(export_file_path.c_str(), "w");
+            if (export_fp == nullptr) {
+                fprintf(stderr, "Error when create file at %s\n%s", export_file_path.c_str(),
+                        std::strerror(errno));
+                return;
+            }
+            auto result_vec = TestOnePairType<uint64_t, uint64_t, MaskHighBitsUint64RNG, UniformUint64RNG>(
+                    seed, key_size_array);
+            ExportToCsv(export_fp, key_size_array, result_vec);
+        }
+
+        {
+
+            fprintf(stderr, "\nTest Low bits masked uint64 key\n\n");
+            std::string data_file_name =
+                    map_name + "__" + hash_name + "__" + "mask_low_bits_uint64_t" + "__" +
+                    "uint64_t" + ".csv";
+            std::string export_file_path = data_dir_path + data_file_name;
+            FILE *export_fp = fopen(export_file_path.c_str(), "w");
+            if (export_fp == nullptr) {
+                fprintf(stderr, "Error when create file at %s\n%s\n", export_file_path.c_str(),
+                        std::strerror(errno));
+                return;
+            }
+            auto result_vec = TestOnePairType<uint64_t, uint64_t, MaskLowBitsUint64RNG, UniformUint64RNG>(
+                    seed, key_size_array);
+            ExportToCsv(export_fp, key_size_array, result_vec);
+        }
+
+        {
+            fprintf(stderr, "\nTest mid split bits masked distributed uint64 key and 56 bytes payload\n\n");
+            std::string data_file_name =
+                    map_name + "__" + hash_name + "__" + "mask_split_bits_uint64_t" + "__" +
+                    "56bytes_payload" + ".csv";
+            std::string export_file_path = data_dir_path + data_file_name;
+            FILE *export_fp = fopen(export_file_path.c_str(), "w");
+            if (export_fp == nullptr) {
+                fprintf(stderr, "Error when create file at %s\n%s", export_file_path.c_str(),
+                        std::strerror(errno));
+                return;
+            }
+            auto result_vec = TestOnePairType<uint64_t, FixSizeStruct<56>, MaskSplitBitsUint64RNG, FixSizeStructRNG<56>>(
+                    seed, key_size_array);
+            ExportToCsv(export_fp, key_size_array, result_vec);
+        }
+
+#endif
+
+#ifndef BENCH_ONLY_INT
+
+        {
+            using BigStringRNG = StringRNG<128, true>;
+            fprintf(stderr, "\nTest Long Len String with fixed length 128\n\n");
+            std::string data_file_name =
+                    map_name + "__" + hash_name + "__" + "mid_string_fix_128" + "__" + "uint64_t" +
+                    ".csv";
+            std::string export_file_path = data_dir_path + data_file_name;
+            FILE *export_fp = fopen(export_file_path.c_str(), "w");
+            if (export_fp == nullptr) {
+                fprintf(stderr, "Error when create file at %s\n%s", export_file_path.c_str(),
+                        std::strerror(errno));
+                return;
+            }
+            auto result_vec = TestOnePairType<std::string, uint64_t, BigStringRNG, UniformUint64RNG>(
+                    seed, key_size_array);
+            ExportToCsv(export_fp, key_size_array, result_vec);
+        }
+
+        {
+            fprintf(stderr, "\nTest Small Random Len String with max length 12\n\n");
+            using SmallStringRNG = StringRNG<12, false>;
+            std::string data_file_name =
+                    map_name + "__" + hash_name + "__" + "small_string_max_12" + "__" + "uint64_t" +
+                    ".csv";
+            std::string export_file_path = data_dir_path + data_file_name;
+            FILE *export_fp = fopen(export_file_path.c_str(), "w");
+            if (export_fp == nullptr) {
+                fprintf(stderr, "Error when create file at %s\n%s", export_file_path.c_str(),
+                        std::strerror(errno));
+                return;
+            }
+            auto result_vec = TestOnePairType<std::string, uint64_t, SmallStringRNG, UniformUint64RNG>(
+                    seed, key_size_array);
+            ExportToCsv(export_fp, key_size_array, result_vec);
+        }
+
+        {
+            fprintf(stderr, "\nTest Small String with fixed length 12\n\n");
+            using SmallStringRNG = StringRNG<12, true>;
+            std::string data_file_name =
+                    map_name + "__" + hash_name + "__" + "small_string_fix_12" + "__" + "uint64_t" +
+                    ".csv";
+            std::string export_file_path = data_dir_path + data_file_name;
+            FILE *export_fp = fopen(export_file_path.c_str(), "w");
+            if (export_fp == nullptr) {
+                fprintf(stderr, "Error when create file at %s\n%s", export_file_path.c_str(),
+                        std::strerror(errno));
+                return;
+            }
+            auto result_vec = TestOnePairType<std::string, uint64_t, SmallStringRNG, UniformUint64RNG>(
+                    seed, key_size_array);
+            ExportToCsv(export_fp, key_size_array, result_vec);
+        }
+
+        {
+            using MidStringRNG = StringRNG<56, false>;
+            fprintf(stderr, "\nTest Mid Random Len String with max length 56\n\n");
+            std::string data_file_name =
+                    map_name + "__" + hash_name + "__" + "mid_string_max_56" + "__" + "uint64_t" +
+                    ".csv";
+            std::string export_file_path = data_dir_path + data_file_name;
+            FILE *export_fp = fopen(export_file_path.c_str(), "w");
+            if (export_fp == nullptr) {
+                fprintf(stderr, "Error when create file at %s\n%s", export_file_path.c_str(),
+                        std::strerror(errno));
+                return;
+            }
+            auto result_vec = TestOnePairType<std::string, uint64_t, MidStringRNG, UniformUint64RNG>(
+                    seed, key_size_array);
+            ExportToCsv(export_fp, key_size_array, result_vec);
+        }
+
+        {
+            using MidStringRNG = StringRNG<56, true>;
+            fprintf(stderr, "\nTest Mid Len String with fixed length 56\n\n");
+            std::string data_file_name =
+                    map_name + "__" + hash_name + "__" + "mid_string_fix_56" + "__" + "uint64_t" +
+                    ".csv";
+            std::string export_file_path = data_dir_path + data_file_name;
+            FILE *export_fp = fopen(export_file_path.c_str(), "w");
+            if (export_fp == nullptr) {
+                fprintf(stderr, "Error when create file at %s\n%s", export_file_path.c_str(),
+                        std::strerror(errno));
+                return;
+            }
+            auto result_vec = TestOnePairType<std::string, uint64_t, MidStringRNG, UniformUint64RNG>(
+                    seed, key_size_array);
+            ExportToCsv(export_fp, key_size_array, result_vec);
+        }
+
+
+#endif
     }
 
-    {
-        fprintf(stderr, "\nTest High bits masked uint64 key\n\n");
-        std::string data_file_name = map_name + "__" + hash_name + "__" + "mask_high_bits_uint64_t" + "__" + "uint64_t" + ".csv";
-        std::string export_file_path = data_dir_path + data_file_name;
-        FILE *export_fp = fopen(export_file_path.c_str(), "w");
-        if (export_fp == nullptr) {
-            fprintf(stderr, "Error when create file at %s\n%s", export_file_path.c_str(), std::strerror(errno));
-            return;
-        }
-        auto result_vec = TestOnePairType<uint64_t, uint64_t, MaskHighBitsUint64RNG, UniformUint64RNG>(seed, key_size_array);
-        ExportToCsv(export_fp, key_size_array, result_vec);
-    }
 
-
-
-    {
-        fprintf(stderr, "\nTest Uniformly distributed uint64 key\n\n");
-        std::string data_file_name = map_name + "__" + hash_name + "__" + "uniform_uint64_t" + "__" + "uint64_t" + ".csv";
-        std::string export_file_path = data_dir_path + data_file_name;
-        FILE *export_fp = fopen(export_file_path.c_str(), "w");
-        if (export_fp == nullptr) {
-            fprintf(stderr, "Error when create file at %s\n%s", export_file_path.c_str(), std::strerror(errno));
-            return;
-        }
-        auto result_vec = TestOnePairType<uint64_t, uint64_t, UniformUint64RNG, UniformUint64RNG>(seed, key_size_array);
-        ExportToCsv(export_fp, key_size_array, result_vec);
-    }
-
-
-    {
-        fprintf(stderr, "\nTest Uniformly distributed uint64 key and 56 bytes payload\n\n");
-        std::string data_file_name = map_name + "__" + hash_name + "__" + "uniform_uint64_t" + "__" + "56bytes_payload" + ".csv";
-        std::string export_file_path = data_dir_path + data_file_name;
-        FILE *export_fp = fopen(export_file_path.c_str(), "w");
-        if (export_fp == nullptr) {
-            fprintf(stderr, "Error when create file at %s\n%s", export_file_path.c_str(), std::strerror(errno));
-            return;
-        }
-        auto result_vec = TestOnePairType<uint64_t, FixSizeStruct<56>, UniformUint64RNG, FixSizeStructRNG<56>>(seed, key_size_array);
-        ExportToCsv(export_fp, key_size_array, result_vec);
-    }
-
-
-
-
-    {
-        fprintf(stderr, "\nTest Small String with max length 13\n\n");
-        using SmallStringRNG = StringRNG<13>;
-        std::string data_file_name = map_name + "__" + hash_name + "__" + "small_string_13" + "__" + "uint64_t" + ".csv";
-        std::string export_file_path = data_dir_path + data_file_name;
-        FILE *export_fp = fopen(export_file_path.c_str(), "w");
-        if (export_fp == nullptr) {
-            fprintf(stderr, "Error when create file at %s\n%s", export_file_path.c_str(), std::strerror(errno));
-            return;
-        }
-        auto result_vec = TestOnePairType<std::string, uint64_t, SmallStringRNG, UniformUint64RNG>(seed, key_size_array);
-        ExportToCsv(export_fp, key_size_array, result_vec);
-    }
-
-    {
-        using MidStringRNG = StringRNG<56>;
-        fprintf(stderr, "\nTest Mid String with max length 56\n\n");
-        std::string data_file_name = map_name + "__" + hash_name + "__" + "mid_string_56" + "__" + "uint64_t" + ".csv";
-        std::string export_file_path = data_dir_path + data_file_name;
-        FILE *export_fp = fopen(export_file_path.c_str(), "w");
-        if (export_fp == nullptr) {
-            fprintf(stderr, "Error when create file at %s\n%s", export_file_path.c_str(), std::strerror(errno));
-            return;
-        }
-        auto result_vec = TestOnePairType<std::string, uint64_t, MidStringRNG, UniformUint64RNG>(seed, key_size_array);
-        ExportToCsv(export_fp, key_size_array, result_vec);
-    }
 
 }
 

@@ -4,8 +4,11 @@ import re
 import subprocess
 import copy
 
+
 # TODO: change the command prefix to what suits the platform
-run_command_prefix = ['time', "taskset", "-c", "12"]
+run_command_prefix = []
+if sys.platform == "linux" or sys.platform == "linux2":
+    run_command_prefix.extend(["taskset", "-c", "12"])
 
 
 def get_work_dir_paths():
@@ -36,10 +39,10 @@ def main():
         return
     seed = int(sys.argv[1])
     export_dir_path = sys.argv[2]
-    print("Will export test data to %s" % export_dir_path)
+    print("Export test data to %s" % export_dir_path)
     root_dir_path, build_dir_path = get_work_dir_paths()
     exe_file_path_list = get_exe_filepaths(build_dir_path)
-    print("Will run the following tests:")
+    print("Run the following tests:")
     print(exe_file_path_list)
     for exe_file_path in exe_file_path_list:
         call_arg_list = copy.deepcopy(run_command_prefix)

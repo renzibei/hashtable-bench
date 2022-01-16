@@ -13,3 +13,6 @@
 [submodule "thirdparty/tsl-robin-map"]
 	path = thirdparty/tsl-robin-map
 	url = https://github.com/Tessil/robin-map.git
+[submodule "thirdparty/xxHash"]
+	path = thirdparty/xxHash
+	url = https://github.com/Cyan4973/xxHash.git
