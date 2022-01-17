@@ -8,7 +8,14 @@ import copy
 # TODO: change the command prefix to what suits the platform
 run_command_prefix = []
 if sys.platform == "linux" or sys.platform == "linux2":
-    run_command_prefix.extend(["taskset", "-c", "12"])
+    affinity_setting_cores = os.sched_getaffinity(0)
+    if len(affinity_setting_cores) > 1:
+        affinity_core = 12
+        available_core_count = os.cpu_count()
+        if available_core_count <= affinity_core:
+            affinity_core = available_core_count - 1
+        print("Set core affinity at core %d" % (affinity_core), flush=True)
+        run_command_prefix.extend(["taskset", "-c", str(affinity_core)])
 
 
 def get_work_dir_paths():

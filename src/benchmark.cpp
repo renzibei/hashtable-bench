@@ -1165,9 +1165,7 @@ void BenchTest(size_t seed, const char* data_dir) {
 
 
     std::vector<size_t> key_size_array = {
-                                    32UL,
-                                    110UL, 240UL, 500UL, 800UL,
-                                          1024UL, 1500UL,
+                                    32UL, 110UL, 240UL, 500UL, 800UL, 1024UL, 1500UL,
                                     2048UL, 3000UL, 6000UL,
                                             8192UL, 12000UL,16384UL, 25000UL,
                                           32768UL, 45000UL, 60000UL,
