@@ -129,7 +129,8 @@ After the new hash directory or hash map directory is added, run the CMake comma
 
 ## Results
 
-Here we show some of the test results. For complete test results, users can visualize the csv data using the tools we provide.
+Here we show part of the test results. For complete test results, users can visualize the csv data using the tools we
+provide.
 
 ### Tested Hash functions and Hash maps
 
@@ -147,7 +148,10 @@ Below is the hash function list we tested
 | fph::StrongxSeedHash    | Seed Hash | More compilicated than fph::MixSeedHash for integer type; Same hash function for string as robin_hood::hash | https://github.com/renzibei/fph-table          |
 | xxHash_xxh3 (with seed) | Seed Hash | Originally designed for string; We use identity hash for integer type | https://github.com/Cyan4973/xxHash             |
 
-We will not show the results of hash `xxHash_xxh3` in tests on integer keys. We also do not show the results of the `uint128_mul::hash` on the integer test on the x86-64 platform or the string test on all platforms because hash `uint128_mul::hash` and hash `absl::hash` are very similar in x86-64. `uint128_mul::hash` is almost always one or two cycles faster than `absl::hash` for integer keys.
+We will not show the results of hash `xxHash_xxh3` in tests on integer keys. We also do not show the results of the
+`uint128_mul::hash` on the integer test on the x86-64 platform or the string test on all platforms because hash
+`uint128_mul::hash` and hash `absl::hash` are very similar in x86-64. `uint128_mul::hash` is almost always one or two
+cycles faster than `absl::hash` for integer keys.
 
 The following table lists the hash tables we tested, some of these hash tables rely on a "good" hash function to work
 properly, which can generate hash values that are as uniformly distributed as possible for unbalanced keys. If a hash
@@ -170,7 +174,8 @@ Here are the hash maps we tested.
 | tsl::robin_map       | Fast in small size; Large memory overhead; Require a good hash function | https://github.com/Tessil/robin-map         |
 | fph::DynamicFphMap   | A dynamic perfect hash table; Ultra-fast in lookup but slow in insert; 2~8 bits per element memory overhead; Does not require a good hash function, require a seed hash function | https://github.com/renzibei/fph-table       |
 
-If too much time is spent in a test, we will count it as the timeout and set the time as zero, and that data point won't be plotted.
+If too much time is spent in a test, we will count it as the timeout and set the time as zero, and that data point won't
+be plotted.
 
 ### Test Platform
 
@@ -328,8 +333,8 @@ Due to space limitations, comprehensive results are not presented in this docume
 
 We can see that the relative performance of the hash tables is similar when using uint64_t as the payload.
 
-On x86-64 platform, `ska::flat_hash_map` is still excellent when the number of elements is small, and the lookup performance of
-`fph::DynamicFphMap` is the best when the number of elements is large.
+On x86-64 platform, `ska::flat_hash_map` is still excellent when the number of elements is small, and the lookup
+performance of `fph::DynamicFphMap` is the best when the number of elements is large.
 
 On the arm64 platform, `fph::DynamicFphMap` using `fph::SimpleSeedHash` has always been the fastest hash table in lookup.
 
@@ -483,8 +488,9 @@ is the fastest especially when the data size is large.
 <center>Figure 25: Look up keys in the map with 0.9 max_load_factor, tested in Apple M1 Max</center>
 
 The keys in this test data are integers whose bits in the high positions will change while other bits remain the same.
-Data patterns with this characteristic sometimes occur when the developers construct 64-bit integers with keys shorter than 64 bits. And if
-the hash function or hash table cannot handle the high-order bit information well, it will have poor performance.
+Data patterns with this characteristic sometimes occur when the developers construct 64-bit integers with keys shorter
+than 64 bits. And if the hash function or hash table cannot handle the high-order bit information well,
+it will have poor performance.
 
 On the x86-64 platform, when `std::hash` is used, both `ska::flat_hash_map` and `ska::bytell_hash_map` perform quite
 well. This may be because the [Fibonacci hashing](https://probablydance.com/2018/06/16/fibonacci-hashing-the-optimization-that-the-world-forgot-or-a-better-alternative-to-integer-modulo/)
@@ -518,8 +524,9 @@ Generally speaking, from the results we have, we first need to pick a pair of ha
 for integer data, `ska::flat_hash_map` which is not very demanding on hash functions is almost always best with
 `std::hash`, which is computationally fast, and similarly, `fph::DynamicFphMap` is almost always best with
 `fph::SimpleSeedHash`. And for other hash tables, it is more appropriate to cooperate with a real hash function
-such as `uint128_mul::hash` (`absl::hash` on x86-64). If it is a string type of key, the `xxHash_xxh3` is often the fastest and good enough on
-the x86-64 platform, while the performance of the `robin_hood::hash` on the arm64 platform is better.
+such as `uint128_mul::hash` (`absl::hash` on x86-64). If it is a string type of key, the `xxHash_xxh3` is often the
+fastest and good enough on the x86-64 platform, while the performance of the `robin_hood::hash` on the arm64 platform
+is better.
 
 In most cases, if the data size is small, `ska::flat_hash_map` can perform very well. And if the data size becomes
 larger, there are more situations to consider.
