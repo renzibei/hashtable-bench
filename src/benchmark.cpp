@@ -265,7 +265,6 @@ std::tuple<uint64_t, uint64_t> TestTableLookUp(Table &table, size_t lookup_time,
 
     size_t look_up_index = 0;
     size_t key_num = input_vec.size();
-    uint64_t useless_sum = 0;
     if (input_vec.empty()) {
         return {0, 0};
     }
@@ -348,9 +347,8 @@ std::tuple<uint64_t, uint64_t> TestTableLookUp(Table &table, size_t lookup_time,
 //    auto look_up_t1 = std::chrono::high_resolution_clock::now();
 //    auto look_up_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(look_up_t1 - look_up_t0).count();
     if constexpr (verbose) {
-        fprintf(stderr, "%s look up use %.3f ns per call, use_less sum: %lu",
-                       MAP_NAME, (double)look_up_ns * 1.0 / (double)lookup_time,
-                       useless_sum);
+        fprintf(stderr, "%s look up use %.3f ns per call",
+                       MAP_NAME, (double)look_up_ns * 1.0 / (double)lookup_time);
     }
     return {look_up_ns, construct_ns};
 }
