@@ -167,7 +167,7 @@ Here are the hash maps we tested.
 | Name                 | Notes                                                        | Link                                        |
 | -------------------- | ------------------------------------------------------------ | ------------------------------------------- |
 | std::unordered_map   | Implemented by the stl library; Does not require a good hash function |                                             |
-| ska::flat_hash_map   | Fast in small size; Memory overhead: sizeof(alignof(size_t)) per element ; Does not require a good hash function | https://github.com/skarupke/flat_hash_map   |
+| ska::flat_hash_map   | Fast in small size; Memory overhead: alignof(size_t) per element ; Does not require a good hash function | https://github.com/skarupke/flat_hash_map   |
 | ska::bytell_hash_map | A little slower than ska::flat_hash_map but one byte per element memory overhead; Does not require a good hash function | https://github.com/skarupke/flat_hash_map   |
 | absl::flat_hash_map  | Use SIMD and metadata; Ultra-fast when looking up keys that are not in the map; one byte per element memory overhead; Require a good hash function | https://abseil.io/blog/20180927-swisstables |
 | absl::node_hash_map  | Slower than absl::flat_hash_map but does not invalidate the pointer after rehash; Require a good hash function | https://github.com/abseil/abseil-cpp        |
@@ -296,6 +296,8 @@ or `uint128_mul::hash`).
 
 <center>Figure 10: Erase and Insert keys, tested in Apple M1 Max</center>
 
+It should be noted that the results of this test are also highly correlated with the distribution of the data. Especially the relationship between deleted data and inserted data. Here we are randomly selecting elements to delete with equal probability. In reality, the way of selecting elements may not be equal probability, for example, the most likely deleted element is the most recently inserted element.
+
 In this test, `ska::flat_hash_map` has almost the best erase and insert performance regardless of the number of
 elements. `tsl::robin_map` performs almost as well with more than 1000 elements.
 
@@ -356,7 +358,7 @@ the number of elements.
 Comparing different hash functions, it can be found that on the x86-64 platform, `xxHash_xxh3` is almost the fastest on
 each data scale for this dataset. By contrast, `robin_hood::hash` is faster on the arm64 platform.
 
-tWhen the amount of data is very small or very large, `ska::flat_hash_map` is the fastest hash map for lookup. And when
+When the amount of data is very small or very large, `ska::flat_hash_map` is the fastest hash map for lookup. And when
 the data size is medium, `fph::DynamicFphMap` has the best query performance.
 
 This dataset is what we consider the least representative because there are too many random parameters for strings of

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <cstddef>
 
 #if defined(_MSC_VER) && SIZE_MAX == UINT64_MAX
 #   include <intrin.h>
@@ -64,7 +65,7 @@ namespace uint128_mul {
             return robin_hood::hash_bytes(src.data(), src.length());
         }
     };
-} // namespace test
+} // namespace uint128_mul
 
 template <typename Key>
 using Hash = uint128_mul::hash<Key>;

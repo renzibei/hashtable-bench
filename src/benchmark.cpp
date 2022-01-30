@@ -368,7 +368,9 @@ std::tuple<uint64_t, uint64_t> TestTableIterate(Table &table, size_t iterate_tim
     for (size_t t = 0; t < iterate_time; ++t) {
         for (auto it = table.begin(); it != table.end(); ++it) {
             // If second is not int
-            PreventElision(std::addressof(it->second));
+            PreventElision([&](){
+                useless_sum += *reinterpret_cast<uint8_t*>(std::addressof(it->second));
+            });
 //            useless_sum += *reinterpret_cast<uint8_t*>(std::addressof(it->second));
         }
     }
@@ -639,7 +641,7 @@ StatsTuple TestTablePerformance(size_t element_num, size_t construct_time, size_
         Table table;
         std::tie(iterate_ns, it_useless_sum) = TestTableIterate<Table,
                 std::vector<mutable_value_type>, GetKey>(
-                table, lookup_time / element_num, src_vec);
+                table, iterate_time, src_vec);
     }
 
 
