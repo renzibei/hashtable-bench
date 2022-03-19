@@ -369,7 +369,7 @@ std::tuple<uint64_t, uint64_t> TestTableIterate(Table &table, size_t iterate_tim
         for (auto it = table.begin(); it != table.end(); ++it) {
             // If second is not int
             PreventElision([&](){
-                useless_sum += *reinterpret_cast<uint8_t*>(std::addressof(it->second));
+                useless_sum += *reinterpret_cast<const uint8_t*>(std::addressof(it->second));
             });
 //            useless_sum += *reinterpret_cast<uint8_t*>(std::addressof(it->second));
         }
@@ -1372,7 +1372,7 @@ void BenchTest(size_t seed, const char* data_dir) {
 
 int main(int argc, const char** argv) {
     if (argc < 3) {
-        fprintf(stderr, "Invalid parameters!\nUsage: bench_{map_name}__{hash_name} seed(size_t) export_data_dir");
+        fprintf(stderr, "Invalid parameters!\nUsage: bench_{map_name}__{hash_name} seed(size_t) export_data_dir\n");
         return -1;
     }
     size_t seed = std::stoul(std::string(argv[1]));
