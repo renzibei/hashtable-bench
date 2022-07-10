@@ -1,5 +1,6 @@
 [submodule "thirdparty/fph-table"]
 	path = thirdparty/fph-table
+	branch = master
 	url = https://github.com/renzibei/fph-table.git
 [submodule "thirdparty/abseil-cpp"]
 	path = thirdparty/abseil-cpp
@@ -19,3 +20,7 @@
 [submodule "thirdparty/HdrHistogram_c"]
 	path = thirdparty/HdrHistogram_c
 	url = https://github.com/HdrHistogram/HdrHistogram_c.git
+[submodule "thirdparty/fph-table-noseed"]
+	path = thirdparty/fph-table-noseed
+	branch = noseed
+	url = https://github.com/renzibei/fph-table.git

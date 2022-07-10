@@ -52,7 +52,8 @@ set(ALLOCATOR_DIR src/allocators/std_allocator)
 find_package(Threads REQUIRED)
 
 
-add_subdirectory(thirdparty/fph-table)
+#add_subdirectory(thirdparty/fph-table)
+add_subdirectory(thirdparty/fph-table-noseed)
 add_subdirectory(thirdparty/abseil-cpp)
 add_subdirectory(thirdparty/tsl-robin-map)
 
