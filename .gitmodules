@@ -16,3 +16,6 @@
 [submodule "thirdparty/xxHash"]
 	path = thirdparty/xxHash
 	url = https://github.com/Cyan4973/xxHash.git
+[submodule "thirdparty/HdrHistogram_c"]
+	path = thirdparty/HdrHistogram_c
+	url = https://github.com/HdrHistogram/HdrHistogram_c.git
