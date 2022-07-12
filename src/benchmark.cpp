@@ -1545,7 +1545,7 @@ void ExportToCsv(FILE* export_fp, const std::vector<size_t>& element_num_vec,
     std::vector<std::string> latency_test_item_vec = {
             "construct_with_reserve", "construct_no_reserve",
             "insert_after_erase", "erase",
-            "lookup_hit_hit_default_load_factor", "lookup_miss_hit_default_load_factor",
+            "lookup_hit_default_load_factor", "lookup_miss_hit_default_load_factor",
             "lookup_50%_hit_default_load_factor",
             "lookup_hit_large_max_load_factor", "lookup_miss_large_max_load_factor",
             "lookup_50%_hit_large_max_load_factor",
