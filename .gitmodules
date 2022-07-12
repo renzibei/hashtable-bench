@@ -24,3 +24,6 @@
 	path = thirdparty/fph-table-noseed
 	branch = noseed
 	url = https://github.com/renzibei/fph-table.git
+[submodule "thirdparty/emhash-map"]
+	path = thirdparty/emhash-map
+	url = https://github.com/ktprime/emhash.git
