@@ -76,5 +76,5 @@ namespace thp {
 
 } // namespace thp
 
-template<class Key, class T>
-using Allocator = thp::ThpAllocator<std::pair<const Key, T>>;
+template<class T>
+using Allocator = thp::ThpAllocator<T>;

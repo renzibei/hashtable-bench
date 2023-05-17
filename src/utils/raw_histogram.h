@@ -107,6 +107,6 @@ namespace raw_h {
         size_t count_;
         size_t max_call_num_;
         std::vector<T, Allocator> data_vec_;
-    }; // namespace raw histogram
+    }; // class raw histogram
 
-} // raw_h
+} // namespace raw_h

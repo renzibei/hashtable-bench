@@ -21,6 +21,8 @@ OPTION(BENCH_ONLY_INT "Benchmark only the uint64_t key" OFF)
 OPTION(BENCH_LATENCY_WHEN_AVAILABLE "Measure the latency when it is available" OFF)
 OPTION(FORCE_BENCH_LATENCY "Force to benchmark the latency" OFF)
 OPTION(USE_RAW_HISTOGRAM "Use raw_histogram, otherwise use HdrHistogram_c" OFF)
+OPTION(BENCH_HEAP_MEMORY_SIZE "Measure the heap memory size" OFF)
+OPTION(USE_HUGE_PAGE "Use Transparent Huge page when available" OFF)
 
 IF(BENCH_ONLY_STRING)
     ADD_DEFINITIONS(-DBENCH_ONLY_STRING)
@@ -38,6 +40,14 @@ IF(FORCE_BENCH_LATENCY)
     ADD_DEFINITIONS(-DFORCE_BENCH_LATENCY)
 ENDIF(FORCE_BENCH_LATENCY)
 
+MESSAGE(STATUS "BENCH_ONLY_STRING: ${BENCH_ONLY_STRING}")
+MESSAGE(STATUS "BENCH_ONLY_INT: ${BENCH_ONLY_INT}")
+MESSAGE(STATUS "BENCH_LATENCY_WHEN_AVAILABLE: ${BENCH_LATENCY_WHEN_AVAILABLE}")
+MESSAGE(STATUS "FORCE_BENCH_LATENCY: ${FORCE_BENCH_LATENCY}")
+MESSAGE(STATUS "USE_RAW_HISTOGRAM: ${USE_RAW_HISTOGRAM}")
+MESSAGE(STATUS "BENCH_HEAP_MEMORY_SIZE: ${BENCH_HEAP_MEMORY_SIZE}")
+MESSAGE(STATUS "USE_HUGE_PAGE: ${USE_HUGE_PAGE}")
+
 file(GLOB INC_HASHES "src/hashes/*")
 file(GLOB INC_MAPS "src/maps/*")
 file(GLOB INC_UTILS "src/utils/")
@@ -45,9 +55,19 @@ file(GLOB INC_SEED_HASHES "src/seed-hashes/*")
 file(GLOB INC_SEED_MAPS "src/seed-maps/*")
 
 set(BENCH_SOURCES src/benchmark.cpp)
-# can use huge pages in linux
-set(ALLOCATOR_DIR src/allocators/std_allocator)
-#set(ALLOCATOR_DIR src/allocators/thp_allocator)
+
+if (BENCH_HEAP_MEMORY_SIZE)
+    set(ALLOCATOR_DIR src/allocators/count_allocator)
+else()
+    if(USE_HUGE_PAGE)
+        # can use huge pages in linux
+        set(ALLOCATOR_DIR src/allocators/thp_allocator)
+    else()
+        set(ALLOCATOR_DIR src/allocators/std_allocator)
+    endif()
+endif()
+
+
 
 find_package(Threads REQUIRED)
 

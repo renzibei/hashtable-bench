@@ -7,4 +7,5 @@
 static const char* MAP_NAME = "ska::flat_hash_map";
 
 template <class Key, class T>
-using Map = ska::flat_hash_map<Key, T, Hash<Key>, std::equal_to<>, Allocator<Key, T>>;
+using Map = ska::flat_hash_map<Key, T, Hash<Key>, std::equal_to<>,
+        Allocator<std::pair<const Key, T>>>;

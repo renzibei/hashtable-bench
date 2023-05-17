@@ -9,5 +9,4 @@ static const char* MAP_NAME = "fph::DynamicFphMap";
 using BucketParamType = uint32_t;
 
 template<class Key, class T>
-using Map = fph::DynamicFphMap<Key, T, Hash<Key>, std::equal_to<>,
-        Allocator<std::pair<const Key, T>>, BucketParamType>;
+using Map = fph::DynamicFphMap<Key, T, Hash<Key>, std::equal_to<>, Allocator<Key, T>, BucketParamType>;

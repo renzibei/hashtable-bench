@@ -21,6 +21,10 @@ namespace hist {
         using Base::Quantile;
         using Base::SortForUse;
 
+        void PrintHdr(size_t show_cnt = 15UL, FILE *out_fp = stdout) {
+            Print(show_cnt, LONG_TAIL_STYLE, out_fp);
+        }
+
     protected:
 
     }; // class HistWrapper
@@ -43,6 +47,10 @@ namespace hist {
         }
 
         void SortForUse() {}
+
+        void PrintHdr(size_t /*show_cnt*/, FILE *out_fp = stdout) {
+            hdr_percentiles_print(hdr_ptr, out_fp, 2, 1.0, CSV);
+        }
 
         ~HistWrapper() {
             hdr_close(hdr_ptr);

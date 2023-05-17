@@ -81,6 +81,39 @@ namespace cpu_t {
     }
 #endif
 
+    CPU_T_ALWAYS_INLINE uint64_t Now64() {
+        uint64_t t;
+#ifdef CPU_T_ARCH_PPC
+        asm volatile("mfspr %0, %1" : "=r"(t) : "i"(268));
+//#elif defined(CPU_T_ARCH_AARCH64)
+//        asm volatile("mrs %0, cntvct_el0" : "=r"(t));
+#elif defined(CPU_T_ARCH_X86_64) && defined(CPU_T_MSC_VER)
+        CPU_T_COMPILER_FENCE;
+        unsigned aux;
+        t = __rdtscp(&aux);
+        CPU_T_COMPILER_FENCE;
+#elif defined(CPU_T_ARCH_X86_64) && (defined(CPU_T_CLANG) || defined(CPU_T_GCC))
+        // Use inline asm because __rdtscp generates code to store TSC_AUX (ecx).
+        asm volatile(
+                    "rdtscp\n\t"
+                    "shl $32, %%rdx\n\t"
+                    "or %%rdx, %0"
+                    : "=a"(t)
+                    :
+                // "memory" avoids reordering. rcx = TSC_AUX. rdx = TSC >> 32.
+                // "cc" = flags modified by SHL.
+                    : "rcx", "rdx", "memory", "cc");
+#else
+        CPU_T_COMPILER_FENCE;
+//        timespec ts;
+//        clock_gettime(CLOCK_REALTIME, &ts);
+//        t = ts.tv_sec * 1000000000LL + ts.tv_nsec;
+        auto tp = std::chrono::high_resolution_clock::now();
+        t = std::chrono::duration_cast<std::chrono::nanoseconds>(tp.time_since_epoch()).count();
+        CPU_T_COMPILER_FENCE;
+#endif
+        return t;
+    }
 
     // from google absl and highwayhash
     // https://github.com/abseil/abseil-cpp/blob/ca80034f59f43eddb6c4c72314572c0e212bf98f/absl/random/internal/nanobenchmark.cc#L215

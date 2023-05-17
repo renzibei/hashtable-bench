@@ -8,10 +8,10 @@
 #include "Map.h"
 // for random generator
 #include "fph/dynamic_fph_table.h"
+#include "fph/meta_fph_table.h"
 #include "utils/cpu_timer.h"
 #include "utils/histogram_wrapper.h"
-
-
+#include "ska_flat_hash_map/flat_hash_map.hpp"
 
 #ifndef FPH_HAVE_BUILTIN
 #ifdef __has_builtin
@@ -90,13 +90,33 @@ inline void PreventElision(T&& output) {
 }
 
 
-template <typename>
-struct is_pair : std::false_type
-{ };
 
-template <typename T, typename U>
-struct is_pair<std::pair<T, U>> : std::true_type
-{ };
+namespace detail {
+    template <typename T, typename = int>
+    struct HasFirst : std::false_type { };
+
+    template <typename T>
+    struct HasFirst <T, decltype((void) T::first, 0)> : std::true_type { };
+
+
+    template <typename T, typename = int>
+    struct HasSecond : std::false_type { };
+
+    template <typename T>
+    struct HasSecond <T, decltype((void) T::second, 0)> : std::true_type { };
+
+    static_assert(HasFirst<std::pair<int, int>>::value &&
+                  HasSecond<std::pair<int,int>>::value);
+};// namespace detail
+
+
+template<typename T>
+using is_pair = std::bool_constant<detail::HasFirst<T>::value
+        && detail::HasSecond<T>::value>;
+
+static_assert(is_pair<std::pair<int, int>>::value);
+static_assert(!is_pair<int>::value);
+//static_assert(is_pair<robin_hood::pair<int, int>>::value);
 
 template<class T, typename = void>
 struct SimpleGetKey {
@@ -153,11 +173,39 @@ std::string ToString(const std::string& t) {
     return t;
 }
 
+std::string ToString(std::string_view view) {
+    size_t len = view.length();
+    std::stringstream ss;
+    for (size_t i = 0; i < len; ++i) {
+        ss << std::hex << uint32_t(uint8_t(view[i])) << " ";
+    }
+    return ss.str();
+}
+
 std::string ToString(const char* src) {
     return src;
 }
 
 using CpuTimer = cpu_t::CpuTimer<uint64_t>;
+
+namespace detail {
+
+    template<class ...Ts>
+    struct voider{
+        using type = void;
+    };
+
+    template<class T, class = void>
+    struct has_max_load_factor : std::false_type{};
+
+    template<class T>
+    struct has_max_load_factor<T, typename voider<decltype(std::declval<T>().max_load_factor(0.5f))>::type> : std::true_type{};
+
+} //namespace detail
+
+// The value of max_load_factor when we test the table rehashed with large
+// max_load_factor
+static constexpr double REHASH_MAX_LOAD_FACTOR = 0.9;
 
 template<class Table, class PairVec, class GetKey = SimpleGetKey<typename PairVec::value_type>>
 bool ConstructTable(Table &table, const PairVec &pair_vec, bool do_reserve = true, bool do_rehash = false) {
@@ -168,12 +216,14 @@ bool ConstructTable(Table &table, const PairVec &pair_vec, bool do_reserve = tru
     }
     for (size_t i = 0; i < pair_vec.size();) {
         const auto &pair = pair_vec[i++];
-        table.insert(pair);
+        table.emplace(pair);
     }
     if (do_rehash) {
-        if (table.load_factor() < 0.45) {
-            table.max_load_factor(0.9);
-            table.rehash(table.size());
+        if constexpr (detail::has_max_load_factor<Table>::value) {
+            if (table.load_factor() < REHASH_MAX_LOAD_FACTOR / 2.0) {
+                table.max_load_factor(REHASH_MAX_LOAD_FACTOR);
+                table.rehash(table.size());
+            }
         }
     }
     return true;
@@ -192,7 +242,8 @@ auto TestTableConstruct(Table &table, const PairVec &pair_vec, CpuTimer& cpu_tim
     if constexpr(!measure_latency) {
         auto begin_time = std::chrono::high_resolution_clock::now();
         for (size_t i = 0; i < pair_vec.size();) {
-            table.insert(pair_vec[i++]);
+            table.emplace(pair_vec[i]);
+            ++i;
         }
         auto end_time = std::chrono::high_resolution_clock::now();
         auto pass_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(end_time - begin_time).count();
@@ -205,7 +256,7 @@ auto TestTableConstruct(Table &table, const PairVec &pair_vec, CpuTimer& cpu_tim
     else {
         for (size_t i = 0; i < pair_vec.size();) {
             auto pass_ticks = cpu_timer.template Measure([&](size_t index){
-                return table.insert(pair_vec[index]).second;
+                return table.emplace(pair_vec[index]).second;
             }, i++);
 //            auto tick0 = CpuTimer::Start();
 //            table.insert(pair_vec[i++]);
@@ -224,16 +275,16 @@ enum LookupExpectation {
 };
 
 template<class Table, bool measure_latency = false,
-        class PairVec, class ValueGen, class GetKey = SimpleGetKey<typename Table::value_type>>
-uint64_t TestTableEraseAndInsertImp(const PairVec& src_vec, ValueGen& miss_value_gen,
+        class PairVec, class GetKey = SimpleGetKey<typename PairVec::value_type>>
+uint64_t TestTableEraseAndInsertImp(const PairVec& src_vec, const PairVec& new_ele_vec,
                                 size_t erase_time, size_t seed,
                                 CpuTimer &cpu_timer,
                                 hist::HistWrapper* erase_hist_ptr = nullptr,
                                 hist::HistWrapper* insert_hist_ptr = nullptr) {
     Table table;
     ConstructTable(table, src_vec, true, false);
-    using value_type = typename MutableValue<typename Table::value_type>::type;
-    std::vector<value_type> element_vec(table.begin(), table.end());
+    using value_type = typename MutableValue<typename PairVec::value_type>::type;
+    std::vector<value_type> element_vec(src_vec.begin(), src_vec.end());
     size_t cur_cnt = element_vec.size();
 
     std::minstd_rand uint_engine(seed);
@@ -243,13 +294,25 @@ uint64_t TestTableEraseAndInsertImp(const PairVec& src_vec, ValueGen& miss_value
     for (size_t t = 0; t < erase_time; ++t) {
         size_t_vec[t] = rand_dis(uint_engine) % cur_cnt;
     }
-    const size_t most_possible_insert_cnt = erase_time;
-    std::vector<value_type> new_vec;
-    new_vec.reserve(most_possible_insert_cnt);
-    for (size_t i = 0; i < most_possible_insert_cnt; ++i) {
-        new_vec.emplace_back(miss_value_gen());
-    }
-    element_vec.template emplace_back(miss_value_gen());
+//    const size_t most_possible_insert_cnt = erase_time;
+//    std::unordered_map<typename value_type::first_type,
+//            typename value_type::second_type> key_set;
+//    ska::flat_hash_map<typename value_type::first_type,
+//        typename value_type::second_type> key_map;
+//    key_map.reserve(cur_cnt + erase_time);
+//    key_map.insert(element_vec.begin(), element_vec.end());
+    auto new_vec = new_ele_vec;
+//    fprintf(stderr, "Begin to test table erase and insert\n");
+//    new_vec.reserve(most_possible_insert_cnt);
+//    for (size_t i = 0; i < most_possible_insert_cnt; ++i) {
+//        auto temp_new_value = miss_value_gen();
+//        while(key_map.find(GetKey{}(temp_new_value)) != key_map.end()) {
+//            temp_new_value = miss_value_gen();
+//        }
+//        new_vec.emplace_back(temp_new_value);
+//        key_map.emplace(std::move(temp_new_value));
+//    }
+//    element_vec.template emplace_back(miss_value_gen());
     if constexpr(!measure_latency) {
         auto start_t = std::chrono::high_resolution_clock::now();
         for (size_t t = 0; t < erase_time; ++t) {
@@ -257,7 +320,10 @@ uint64_t TestTableEraseAndInsertImp(const PairVec& src_vec, ValueGen& miss_value
             if FPH_LIKELY(ok) {
                 size_t erase_index = size_t_vec[t];
                 table.erase(GetKey{}(element_vec[erase_index]));
-                element_vec[erase_index] = new_vec[t];
+                element_vec[erase_index] = std::move(new_vec[t]);
+            }
+            else {
+                fprintf(stderr, "Emplace failed");
             }
         }
         auto end_t = std::chrono::high_resolution_clock::now();
@@ -274,7 +340,7 @@ uint64_t TestTableEraseAndInsertImp(const PairVec& src_vec, ValueGen& miss_value
             auto erase_ticks = cpu_timer.template Measure([&](size_t idx){
                 table.erase(GetKey{}(element_vec[idx]));
             }, erase_index);
-            element_vec[erase_index] = new_vec[t];
+            element_vec[erase_index] = std::move(new_vec[t]);
             insert_hist_ptr->AddValue(insert_ticks);
             erase_hist_ptr->AddValue(erase_ticks);
         }
@@ -284,10 +350,11 @@ uint64_t TestTableEraseAndInsertImp(const PairVec& src_vec, ValueGen& miss_value
 }
 
 template<class Table, bool measure_latency = false,
-        class PairVec, class ValueGen,
+        class PairVec,
         class GetKey = SimpleGetKey<typename PairVec::value_type>>
-uint64_t TestTableEraseAndInsert(ValueGen& miss_value_gen,
+uint64_t TestTableEraseAndInsert(
                              const PairVec &src_vec,
+                             const PairVec &new_vec,
                              size_t erase_time, size_t seed,
                              CpuTimer &cpu_timer,
                              hist::HistWrapper* erase_hist_ptr = nullptr,
@@ -297,13 +364,13 @@ uint64_t TestTableEraseAndInsert(ValueGen& miss_value_gen,
     std::mt19937_64 uint_engine(seed);
     std::uniform_int_distribution<size_t> rand_dis;
 
-    const size_t test_timeout_erase_cnt = 10000ULL;
+    const size_t test_timeout_erase_cnt = std::min(erase_time, size_t(10000ULL));
     const size_t test_timeout_total_op_cnt = test_timeout_erase_cnt * 2ULL;
     constexpr int64_t timeout_per_op_ns = 4000LL; // 1400 ns per operation
     const uint64_t timeout_total_threshold = test_timeout_total_op_cnt * timeout_per_op_ns;
 
     auto test_timeout_ns = TestTableEraseAndInsertImp<Table, false>
-                (src_vec, miss_value_gen, test_timeout_erase_cnt,
+                (src_vec, new_vec, test_timeout_erase_cnt,
                  rand_dis(uint_engine), cpu_timer);
     if (test_timeout_ns > timeout_total_threshold) {
         fprintf(stderr, "Timeout when in testing EraseAndInsert, avg erase and insert op use %.4f ns\n",
@@ -311,7 +378,7 @@ uint64_t TestTableEraseAndInsert(ValueGen& miss_value_gen,
         return 0;
     }
     return TestTableEraseAndInsertImp<Table, measure_latency>
-                    (src_vec, miss_value_gen, erase_time, rand_dis(uint_engine),
+                    (src_vec, new_vec, erase_time, rand_dis(uint_engine),
                      cpu_timer, erase_hist_ptr, insert_hist_ptr);
 
 }
@@ -484,7 +551,7 @@ std::tuple<uint64_t, uint64_t> TestTableIterate(Table &table,
 
 template<class T, class RNG>
 void ConstructRngPtr(std::unique_ptr<RNG>& key_rng_ptr, size_t seed, size_t max_possible_value) {
-    if constexpr(std::is_integral_v<T>) {
+    if constexpr(std::is_integral_v<T> || std::is_same_v<T, std::string>) {
         key_rng_ptr = std::make_unique<RNG>(seed, max_possible_value);
     }
     else {
@@ -494,7 +561,12 @@ void ConstructRngPtr(std::unique_ptr<RNG>& key_rng_ptr, size_t seed, size_t max_
 }
 
 // see ExportToCsv to get the info about StatsTuple
-using StatsTuple = std::array<double, 13>;
+#ifdef USE_COUNT_ALLOC
+inline constexpr size_t STATS_TUPLE_SIZE = 17;
+#else
+inline constexpr size_t STATS_TUPLE_SIZE = 13;
+#endif
+using StatsTuple = std::array<double, STATS_TUPLE_SIZE>;
 using TimeoutFlagArr = std::array<bool, std::tuple_size_v<StatsTuple>>;
 static constexpr std::array<size_t, 7> check_timeout_index_arr = {2, 5, 6, 7, 8, 9, 10};
 
@@ -510,7 +582,8 @@ using HistResults = std::array<HistPoint, HIST_QUANTILE_NUM>;
 using HistResultsArray = std::array<HistResults, 11>;
 
 HistResults GetHistResults(hist::HistWrapper& hist) {
-    constexpr double per_arr[HIST_QUANTILE_NUM] = {0.5, 0.95, 0.99};
+    constexpr double per_arr[HIST_QUANTILE_NUM] = {0.5, /*0.95,*/ 0.99,
+                                                   /*0.999, 0.9999, 0.99999,*/ 1.0 };
     constexpr size_t per_arr_size = sizeof(per_arr) / sizeof(per_arr[0]);
     hist.SortForUse();
     HistResults results;
@@ -545,7 +618,8 @@ std::tuple<StatsTuple, HistResultsArray> TestTablePerformance(
     ValueRandomGen value_gen{seed, std::move(*key_rng_ptr), std::move(*value_rng_ptr)};
     value_gen.seed(seed);
 
-    std::unordered_set<key_type> key_set;
+    ska::flat_hash_set<key_type> key_set;
+//    std::unordered_set<key_type> key_set;
     key_set.reserve(element_num);
 
     std::vector<mutable_value_type> src_vec;
@@ -559,10 +633,56 @@ std::tuple<StatsTuple, HistResultsArray> TestTablePerformance(
         key_set.insert(GetKey{}(temp_pair));
     }
 
+    using HashFunc = typename Table::hasher;
+    {
+        ska::flat_hash_set<size_t> hash_set;
+        hash_set.reserve(src_vec.size());
+        HashFunc hasher{};
+        for (const auto& value: src_vec) {
+            const auto& key = GetKey{}(value);
+            auto hash_value = hasher(key);
+            if (hash_set.find(hash_value) != hash_set.end()) {
+                fprintf(stderr, "Hash value collision in src_vec!\n");
+            }
+            else {
+                hash_set.emplace(hash_value);
+            }
+
+        }
+//        ska::flat_hash_map<size_t, key_type> hash_count_map;
+//        hash_count_map.reserve(src_vec.size());
+//        for (const auto &value: src_vec) {
+//            const auto &key = GetKey{}(value);
+//            auto hash_value = HashFunc{}(key);
+//            auto find_it = hash_count_map.find(hash_value);
+//            const auto &existing_key = (find_it->second);
+//            if (find_it != hash_count_map.end()) {
+//                if constexpr(std::is_same_v<key_type, std::string>) {
+//                    fprintf(stderr, "Hash values collision, key: %s and %s has same"
+//                                    " hash value %zu\n",
+//                            ToString(std::string_view(existing_key)).c_str(),
+//                            ToString(std::string_view(key)).c_str(), hash_value);
+////                    (find_it->second).push_back(key);
+//                }
+//                else {
+//                    fprintf(stderr, "Hash values collision, key: %s and %s has same"
+//                                    " hash value %zu\n",
+//                            ToString(existing_key).c_str(),
+//                            ToString(key).c_str(), hash_value);
+////                    (find_it->second).push_back(key);
+//                }
+//
+//
+//            } else {
+//                hash_count_map.emplace(hash_value, key);
+//            }
+//        }
+    }
+
 #if BENCH_LATENCY
     static constexpr int64_t LOOKUP_MAX_LATENCY = 100'000LL;
-    static constexpr int64_t CONSTRUCT_MAX_LATENCY = 100'000'000LL;
-    static constexpr int64_t INSERT_MAX_LATENCY = 20'000'000LL;
+    static constexpr int64_t CONSTRUCT_MAX_LATENCY = 5'000'000'000LL;
+    static constexpr int64_t INSERT_MAX_LATENCY = 1'000'000'000LL;
     static constexpr int64_t ERASE_MAX_LATENCY = 20'000'000LL;
     static constexpr int64_t ITERATE_MAX_LATENCY = 100'000LL;
 #endif
@@ -578,7 +698,9 @@ std::tuple<StatsTuple, HistResultsArray> TestTablePerformance(
         constexpr uint64_t timeout_threshold_ns_per_insert = 20'000ULL; // 20 us
 #endif
         size_t insert_cnt_sum = 0;
+
         for (size_t t = 0; t < construct_time; ++t) {
+
             Table table;
             uint64_t temp_construct_ns = TestTableConstruct<true, false, false>
                     (table, src_vec, cpu_timer);
@@ -591,7 +713,10 @@ std::tuple<StatsTuple, HistResultsArray> TestTablePerformance(
                 total_reserve_construct_ns = 0;
                 break;
             }
+
         }
+
+
     } catch(std::exception &e) {
         fprintf(stderr, "Catch exception when TestTableConstruct with reserve, element_num: %lu\n%s\n",
                 element_num, e.what());
@@ -603,7 +728,7 @@ std::tuple<StatsTuple, HistResultsArray> TestTablePerformance(
     HistResults construct_with_reserve_hist_results{};
     try {
         hist::HistWrapper hist(construct_time * src_vec.size(),
-                               1LL, CONSTRUCT_MAX_LATENCY);
+                               2LL, CONSTRUCT_MAX_LATENCY);
         for (size_t t = 0; t < construct_time; ++t) {
             // if already timeout
             if (total_reserve_construct_ns == 0) {
@@ -663,7 +788,7 @@ std::tuple<StatsTuple, HistResultsArray> TestTablePerformance(
     HistResults construct_no_reserve_hist_results{};
     try {
         auto hist = hist::HistWrapper(construct_time * src_vec.size(),
-                                 1LL, CONSTRUCT_MAX_LATENCY);
+                                 2LL, CONSTRUCT_MAX_LATENCY);
         for (size_t t = 0; t < construct_time; ++t) {
             // if already timeout
             if (total_no_reserve_construct_ns == 0) {
@@ -686,10 +811,13 @@ std::tuple<StatsTuple, HistResultsArray> TestTablePerformance(
 
 
     // generate a list of key not in the key set
+    // the miss keys are generated with the similar pattern as the elements
     std::vector<mutable_value_type> lookup_vec;
     lookup_vec.reserve(src_vec.size());
     std::unique_ptr<KeyRNG> miss_key_rng_ptr;
-    ConstructRngPtr<key_type, KeyRNG>(miss_key_rng_ptr, random_engine(), std::numeric_limits<size_t>::max());
+    size_t miss_value_max_num = std::max(std::max(lookup_time, element_num), erase_time) * 4ULL;
+//    size_t miss_value_max_num = std::numeric_limits<size_t>::max();
+    ConstructRngPtr<key_type, KeyRNG>(miss_key_rng_ptr, random_engine(), miss_value_max_num);
     ConstructRngPtr<mapped_type, ValueRNG>(value_rng_ptr, random_engine(), std::numeric_limits<size_t>::max());
     ValueRandomGen miss_value_gen{random_engine(), std::move(*miss_key_rng_ptr), std::move(*value_rng_ptr)};
     for (size_t i = 0; i < src_vec.size(); ++i) {
@@ -701,6 +829,67 @@ std::tuple<StatsTuple, HistResultsArray> TestTablePerformance(
         lookup_vec.push_back(temp_pair);
     }
 
+    std::vector<value_type> new_vec;
+    {
+        const size_t max_possible_insert_cnt = erase_time;
+//    std::unordered_map<typename value_type::first_type,
+//            typename value_type::second_type> key_set;
+//        ska::flat_hash_map<size_t, key_type> hash_key_vec_map;
+        ska::flat_hash_set<typename value_type::first_type> new_key_set;
+//        hash_key_vec_map.reserve(src_vec.size() + max_possible_insert_cnt);
+        ska::flat_hash_set<size_t> hash_set;
+        hash_set.reserve(src_vec.size() + max_possible_insert_cnt);
+        HashFunc hasher{};
+        for (const auto& value: src_vec) {
+            const auto& key = GetKey{}(value);
+            auto hash_value = HashFunc{}(key);
+            new_key_set.insert(key);
+            hash_set.emplace(hash_value);
+//            hash_key_vec_map.emplace(hash_value, key);
+        }
+        new_key_set.reserve(src_vec.size() + max_possible_insert_cnt);
+
+//        key_set.insert(src_vec.begin(), src_vec.end());
+
+        new_vec.reserve(max_possible_insert_cnt);
+
+
+        for (size_t i = 0; i < max_possible_insert_cnt; ++i) {
+            auto temp_new_value = miss_value_gen();
+            while(new_key_set.find(GetKey{}(temp_new_value)) != new_key_set.end()) {
+                temp_new_value = miss_value_gen();
+            }
+            const auto& new_key = GetKey{}(temp_new_value);
+            auto new_hash_value = hasher(new_key);
+            if (hash_set.find(new_hash_value) != hash_set.end()) {
+                fprintf(stderr, "Hash value collision in possible insert!\n");
+            }
+            else {
+                hash_set.emplace(new_hash_value);
+            }
+//            auto hash_find_it = hash_key_vec_map.find(new_hash_value);
+//            if (hash_find_it != hash_key_vec_map.end()) {
+//                if constexpr (std::is_same_v<key_type, std::string>) {
+//                    fprintf(stderr, "key %s and %s have the same hash value: %zu\n",
+//                            ToString(std::string_view(hash_find_it->second)).c_str(),
+//                            ToString(std::string_view(new_key)).c_str(), new_hash_value);
+//                }
+//                else {
+//                    fprintf(stderr, "key %s and %s have the same hash value: %zu\n",
+//                            ToString(hash_find_it->second).c_str(),
+//                            ToString(new_key).c_str(), new_hash_value);
+//                }
+//
+//            }
+//            else {
+//                hash_key_vec_map.emplace(new_hash_value, new_key);
+////                hash_key_vec_map[new_hash_value].push_back(new_key);
+//            }
+            new_vec.emplace_back(temp_new_value);
+            new_key_set.emplace(std::move(GetKey{}(temp_new_value)));
+        }
+    }
+
     // test erase and insert
     uint64_t erase_and_insert_ns = 0;
     {
@@ -710,8 +899,8 @@ std::tuple<StatsTuple, HistResultsArray> TestTablePerformance(
         else {
             Table table;
             erase_and_insert_ns =
-                    TestTableEraseAndInsert<Table, false>(miss_value_gen,
-                          src_vec, erase_time, seed,
+                    TestTableEraseAndInsert<Table, false>(
+                          src_vec, new_vec, erase_time, seed,
                           cpu_timer);
         }
 
@@ -725,21 +914,24 @@ std::tuple<StatsTuple, HistResultsArray> TestTablePerformance(
         }
         else {
             auto insert_hist = hist::HistWrapper(erase_time + 1LL,
-                                                 1, INSERT_MAX_LATENCY);
+                                                 2, INSERT_MAX_LATENCY);
             auto erase_hist = hist::HistWrapper(erase_time + 1LL,
                                                 1, ERASE_MAX_LATENCY);
             Table table;
-            TestTableEraseAndInsert<Table, true>(miss_value_gen,
-                                                  src_vec, erase_time, seed,
-                                                  cpu_timer, &erase_hist,
-                                                  &insert_hist);
+            TestTableEraseAndInsert<Table, true>(
+                  src_vec, new_vec, erase_time, seed,
+                  cpu_timer, &erase_hist,
+                  &insert_hist);
             erase_hist_results = GetHistResults(erase_hist);
             insert_hist_results = GetHistResults(insert_hist);
         }
     }
 #endif
 
-
+#ifdef USE_COUNT_ALLOC
+    double no_rehash_final_used_bytes = 0.0;
+    double no_rehash_peak_used_bytes = 0.0;
+#endif
     // test lookup keys in the map
     float no_rehash_load_factor = 0;
     uint64_t in_no_rehash_lookup_ns = 0;
@@ -748,13 +940,29 @@ std::tuple<StatsTuple, HistResultsArray> TestTablePerformance(
             fprintf(stderr, "%s hit no rehash find test already timeout, not test\n", MAP_NAME);
         }
         else {
+#ifdef USE_COUNT_ALLOC
+//            fprintf(stdout, "Before test count bytes no rehash\n");
+            count::MemoryCount::instance().ResetPeakBytes();
+            size_t start_bytes = count::MemoryCount::instance().cur_bytes();
+#endif
             Table table;
             std::tie(in_no_rehash_lookup_ns, std::ignore) =
                     TestTableLookUp<KEY_IN, false>(table, lookup_time, src_vec,
                          src_vec, construct_seed, false, cpu_timer);
             no_rehash_load_factor = table.load_factor();
+#ifdef USE_COUNT_ALLOC
+            size_t end_bytes = count::MemoryCount::instance().cur_bytes();
+            size_t temp_peak_bytes = count::MemoryCount::instance().peak_bytes();
+            no_rehash_final_used_bytes = static_cast<double>(end_bytes - start_bytes);
+            no_rehash_peak_used_bytes = static_cast<double>(temp_peak_bytes);
+//            fprintf(stdout, "After test count bytes, no rehash\n");
+#endif
+
         }
     }
+#ifdef USE_COUNT_ALLOC
+//    fprintf(stdout, "After destructor when test count bytes no rehash\n");
+#endif
 
 #if BENCH_LATENCY
     HistResults in_no_rehash_lookup_hist_results{};
@@ -853,6 +1061,10 @@ std::tuple<StatsTuple, HistResultsArray> TestTablePerformance(
 
 
     // test look up keys in the map with larger max_load_factor
+#ifdef USE_COUNT_ALLOC
+    double with_rehash_final_used_bytes = 0.0;
+    double with_rehash_peak_used_bytes = 0.0;
+#endif
     float with_rehash_load_factor = 0;
     uint64_t in_with_rehash_lookup_ns = 0, in_with_rehash_construct_ns = 0;
     {
@@ -860,14 +1072,29 @@ std::tuple<StatsTuple, HistResultsArray> TestTablePerformance(
             fprintf(stderr, "%s hit with rehash find test already timeout, not test\n", MAP_NAME);
         }
         else {
+#ifdef USE_COUNT_ALLOC
+//            fprintf(stdout, "Before test count bytes with rehash\n");
+            count::MemoryCount::instance().ResetPeakBytes();
+            size_t start_bytes = count::MemoryCount::instance().cur_bytes();
+#endif
             Table table;
             std::tie(in_with_rehash_lookup_ns, in_with_rehash_construct_ns) =
                     TestTableLookUp<KEY_IN, false>(table, lookup_time, src_vec,
                         src_vec, construct_seed, true, cpu_timer);
             with_rehash_load_factor = table.load_factor();
+#ifdef USE_COUNT_ALLOC
+            size_t end_bytes = count::MemoryCount::instance().cur_bytes();
+            size_t temp_peak_bytes = count::MemoryCount::instance().peak_bytes();
+            with_rehash_final_used_bytes = static_cast<double>(end_bytes - start_bytes);
+            with_rehash_peak_used_bytes = static_cast<double>(temp_peak_bytes);
+//            fprintf(stdout, "After test count bytes, with rehash\n");
+#endif
         }
 
     }
+#ifdef USE_COUNT_ALLOC
+//    fprintf(stdout, "After destructor when test count bytes with rehash\n");
+#endif
 
 #if BENCH_LATENCY
     HistResults in_with_rehash_lookup_hist_results{};
@@ -1012,6 +1239,20 @@ std::tuple<StatsTuple, HistResultsArray> TestTablePerformance(
                 (double)iterate_ns / double(iterate_time * element_num),
                 double(in_with_rehash_construct_ns + out_with_rehash_construct_ns + may_with_rehash_construct_ns) / (1e+9) / 3.0
             );
+#ifdef USE_COUNT_ALLOC
+    double no_rehash_final_used_mb = no_rehash_final_used_bytes / (1024.0 * 1024.0);
+    double no_rehash_peak_used_mb = no_rehash_peak_used_bytes / (1024.0 * 1024.0);
+    double with_rehash_final_used_mb = with_rehash_final_used_bytes / (1024.0 * 1024.0);
+    double with_rehash_peak_used_mb = with_rehash_peak_used_bytes / (1024.0 * 1024.0);
+    fprintf(stderr, "%s, for %lu elements, no rehash use %lf MB, peak use %lf MB, "
+                    "with rehash use %lf MB, peak use %lf MB, sizeof(pair) = %lu\n",
+            MAP_NAME, element_num,
+            no_rehash_final_used_mb,
+            no_rehash_peak_used_mb,
+            with_rehash_final_used_mb,
+            with_rehash_peak_used_mb,
+            sizeof(value_type));
+#endif
 #if BENCH_LATENCY
     auto hist_re2str = [&](const HistResults& results) {
         std::stringstream ret;
@@ -1021,7 +1262,7 @@ std::tuple<StatsTuple, HistResultsArray> TestTablePerformance(
                     hist_point.value - cpu_timer.overhead_ticks())
                                 * cpu_timer.ns_per_tick();
             latency_ns = std::max(0.0, latency_ns);
-            ret << "P" << std::setprecision(3) << std::defaultfloat <<
+            ret << "P" << std::setprecision(8) << std::defaultfloat <<
                 hist_point.percentage * 100.0 << ": " <<
                 std::setprecision(3) << std::fixed <<latency_ns;
             if (i + 1UL < results.size()) {
@@ -1069,12 +1310,18 @@ std::tuple<StatsTuple, HistResultsArray> TestTablePerformance(
 #endif
 
     StatsTuple avg_time_arr = {
-           avg_construct_time_with_reserve_ns, avg_construct_time_without_reserve_ns,
-           avg_erase_insert_ns,
-           no_rehash_load_factor, with_rehash_load_factor,
-           avg_hit_without_rehash_lookup_ns, avg_miss_without_rehash_lookup_ns, avg_may_without_rehash_lookup_ns,
-           avg_hit_with_rehash_lookup_ns, avg_miss_with_rehash_lookup_ns, avg_may_with_rehash_lookup_ns,
-           avg_iterate_ns, avg_final_rehash_construct_ns
+        avg_construct_time_with_reserve_ns, avg_construct_time_without_reserve_ns,
+        avg_erase_insert_ns,
+        no_rehash_load_factor, with_rehash_load_factor,
+        avg_hit_without_rehash_lookup_ns, avg_miss_without_rehash_lookup_ns, avg_may_without_rehash_lookup_ns,
+        avg_hit_with_rehash_lookup_ns, avg_miss_with_rehash_lookup_ns, avg_may_with_rehash_lookup_ns,
+        avg_iterate_ns, avg_final_rehash_construct_ns,
+#ifdef USE_COUNT_ALLOC
+        no_rehash_final_used_mb,
+        no_rehash_peak_used_mb,
+        with_rehash_final_used_mb,
+        with_rehash_peak_used_mb,
+#endif
     };
 
 
@@ -1196,27 +1443,73 @@ protected:
 
 };
 
-template<size_t max_len, bool fix_length = false>
+enum StringRNGPattern {
+    PRINTABLE_CHARS,
+    SPLIT_MASK_BYTES,
+};
+
+template<size_t max_len, StringRNGPattern pattern, bool fix_length = false>
 class StringRNG {
 public:
 
 //    StringRNG(): init_seed(std::random_device{}()), random_engine(init_seed) {}
     StringRNG(const StringRNG& other): init_seed(other.init_seed),
-                                                   random_engine(other.random_engine) {}
+    max_element_size(other.max_element_size),random_engine(other.random_engine) {}
 
-    explicit StringRNG(size_t seed): init_seed(seed), random_engine(seed) {}
+    explicit StringRNG(size_t seed, size_t max_element_size): init_seed(seed),
+        max_element_size(max_element_size), random_engine(seed) {}
 
     StringRNG(StringRNG&& other) noexcept:
             init_seed(std::exchange(other.init_seed, 0)),
+            max_element_size(other.max_element_size),
             random_engine(std::move(other.random_engine)){}
 
     StringRNG& operator=(StringRNG&& other) noexcept {
         this->init_seed = std::exchange(other.init_seed, 0);
+        this->max_element_size = other.max_element_size;
         this->random_engine = std::move(other.random_engine);
         return *this;
     }
 
-    std::string operator()(size_t length) {
+    /**
+     * random generate a string consists of alpha num with random length from [1, 10]
+     * @return
+     */
+    std::string operator()() {
+        // TODO: change default size to bigger number if needed
+        if constexpr (pattern == PRINTABLE_CHARS) {
+            if constexpr (fix_length) {
+                return RandomGenStr<max_len>();
+            } else {
+                size_t random_len = 1UL + random_gen(random_engine) % max_len;
+                return RandomGenStr(random_len);
+            }
+        }
+        else if constexpr (pattern == SPLIT_MASK_BYTES) {
+            size_t rand_int = random_gen(random_engine);
+            if constexpr (fix_length) {
+                return GenSplitBitsBytes<max_len>(max_element_size, rand_int);
+            }
+            else {
+                size_t random_len = 1UL + random_gen(random_engine) % max_len;
+                return GenSplitBitsBytes<max_len>(max_element_size, rand_int).substr(0, random_len);
+            }
+        }
+    }
+
+    void seed(uint64_t seed = 0) {
+        init_seed = seed;
+        random_engine.seed(seed);
+    }
+
+    size_t init_seed;
+
+protected:
+    size_t max_element_size;
+    std::mt19937_64 random_engine;
+    std::uniform_int_distribution<uint64_t> random_gen;
+
+    std::string RandomGenStr(size_t length) {
         static constexpr char alphanum[] =
                 "0123456789"
                 "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -1241,33 +1534,35 @@ public:
         return ret;
     }
 
-
-    /**
-     * random generate a string consists of alpha num with random length from [1, 10]
-     * @return
-     */
-    std::string operator()() {
-        // TODO: change default size to bigger number if needed
-
-        if constexpr (fix_length) {
-            return RandomGenStr<max_len>();
+    template <size_t str_len>
+    std::string GenSplitBitsBytes(size_t max_element_num,
+                                  size_t rand_int) {
+        std::string buf_str(str_len, 0xff);
+        fph::meta::detail::BitArrayView<uint8_t, 1> bits_view((uint8_t *) buf_str.data());
+        size_t need_digits = fph::dynamic::detail::RoundUpLog2(max_element_num);
+        const size_t mask = fph::dynamic::detail::GenBitMask<size_t>(need_digits);
+        rand_int &= mask;
+        constexpr size_t full_digits = std::numeric_limits<char>::digits * str_len;
+        size_t padding_time = need_digits > 0UL ? need_digits - 1UL : 0UL;
+        size_t padding_digits = full_digits - need_digits;
+        size_t per_padding_digits = padding_digits / padding_time;
+        size_t has_padding_digits = 0UL;
+        if (need_digits > 0) {
+            bits_view.set(0, !(rand_int & 0x1U));
         }
-        else {
-            size_t random_len = 1UL + random_gen(random_engine) % max_len;
-            return (*this)(random_len);
+        size_t set_position = 0;
+//    size_t mask = need_digits > 0UL ? 1UL : 0UL;
+        for (size_t i = 0; i < padding_time; ++i) {
+            size_t this_padding_digits = (i + 1UL == padding_time ? (padding_digits -
+                                                                     has_padding_digits)
+                                                                  : per_padding_digits);
+            set_position += this_padding_digits + 1UL;
+            bits_view.set(set_position, !(rand_int & (1UL << (i + 1U))));
+//            mask = (mask << (this_padding_digits + 1UL)) | 1UL;
+            has_padding_digits += this_padding_digits;
         }
+        return buf_str;
     }
-
-    void seed(uint64_t seed = 0) {
-        init_seed = seed;
-        random_engine.seed(seed);
-    }
-
-    size_t init_seed;
-
-protected:
-    std::minstd_rand random_engine;
-    std::uniform_int_distribution<uint32_t> random_gen;
 };
 
 template<size_t size>
@@ -1311,8 +1606,23 @@ constexpr char PathSeparator() {
 #endif
 }
 
-template<class Table1, class Table2, class GetKey = SimpleGetKey<typename Table1::value_type>,
-        class ValueEqual = std::equal_to<typename Table1::value_type>>
+namespace detail {
+    template<class T, class U, bool is_p = is_pair<T>::value && is_pair<U>::value>
+    struct ValueEqual {
+        constexpr bool operator()(const T& t, const U&u) const {
+            if constexpr (is_p) {
+                return t.first == u.first && t.second == u.second;
+            }
+            else {
+                return t == u;
+            }
+        }
+    };
+}; // namespace detail
+
+template<class Table1, class Table2, class GetKey1 = SimpleGetKey<typename Table1::value_type>,
+        class GetKey2 = SimpleGetKey<typename Table2::value_type>,
+        class ValueEqual = detail::ValueEqual<typename Table1::value_type, typename Table2::value_type>>
 bool IsTableSame(const Table1 &table1, const Table2 &table2) {
     if (table1.size() != table2.size()) {
         return false;
@@ -1321,12 +1631,13 @@ bool IsTableSame(const Table1 &table1, const Table2 &table2) {
     size_t element_cnt = 0;
     for (const auto& pair :table1) {
         ++element_cnt;
-        auto find_it = table2.find(GetKey{}(pair));
+        auto find_it = table2.find(GetKey1{}(pair));
         if FPH_UNLIKELY(find_it == table2.end()) {
-            fprintf(stderr, "Fail to find %s in table2, can find in table1 status: %d", ToString(GetKey{}(pair)).c_str(), table1.find(GetKey{}(pair)) != table1.end());
+            fprintf(stderr, "Fail to find %s in table2, can find in table1 status: %d",
+                    ToString(GetKey1{}(pair)).c_str(), table1.find(GetKey1{}(pair)) != table1.end());
             return false;
         }
-        if FPH_UNLIKELY(!ValueEqual{}(pair, *find_it)) {
+        if FPH_UNLIKELY(!(ValueEqual{}(pair, *find_it))) {
             return false;
         }
     }
@@ -1337,12 +1648,12 @@ bool IsTableSame(const Table1 &table1, const Table2 &table2) {
     element_cnt = 0;
     for (const auto& pair :table2) {
         ++element_cnt;
-        auto find_it = table1.find(GetKey{}(pair));
+        auto find_it = table1.find(GetKey2{}(pair));
         if FPH_UNLIKELY(find_it == table1.end()) {
-            fprintf(stderr, "Fail to find %s in table1", ToString(GetKey{}(pair)).c_str());
+            fprintf(stderr, "Fail to find %s in table1", ToString(GetKey2{}(pair)).c_str());
             return false;
         }
-        if FPH_UNLIKELY(!ValueEqual{}(pair, *find_it)) {
+        if FPH_UNLIKELY(!ValueEqual{}(*find_it, pair)) {
             return false;
         }
     }
@@ -1380,7 +1691,7 @@ int TestBasicCorrect(size_t seed) {
 
             for (size_t i = 0; i < element_num; ++i) {
                 const auto& pair = src_vec[i];
-                table.insert(pair);
+                table.emplace(pair);
                 bench_table.insert(pair);
                 if (!IsTableSame(table, bench_table)) {
                     fprintf(stderr, "%s with %s table not same with std during the insert test\n",
@@ -1530,13 +1841,17 @@ void ExportToCsv(FILE* export_fp, const std::vector<size_t>& element_num_vec,
                              "avg_miss_large_max_load_factor_lookup_ns,"
                              "avg_50%_hit_large_max_load_factor_lookup_ns,"
                              "avg_iterate_ns,avg_with_final_rehash_construct_ns";
+#ifdef USE_COUNT_ALLOC
+    csv_header += ",final_default_load_factor_size_mb,peak_default_load_factor_size_mb"
+                  ",final_large_load_factor_size_mb,peak_large_load_factor_size_mb";
+#endif
 #if BENCH_LATENCY
     csv_header.append(",");
     auto hist2hdr = [](const HistResults& hist){
         std::vector<std::string> hdr;
         for (const auto& hist_point: hist) {
             std::stringstream temp_ss;
-            temp_ss << "_P" << std::setprecision(3) << std::defaultfloat <<
+            temp_ss << "_P" << std::setprecision(8) << std::defaultfloat <<
                     hist_point.percentage * 100.0 << "_latency";
             hdr.push_back(temp_ss.str());
         }
@@ -1545,7 +1860,7 @@ void ExportToCsv(FILE* export_fp, const std::vector<size_t>& element_num_vec,
     std::vector<std::string> latency_test_item_vec = {
             "construct_with_reserve", "construct_no_reserve",
             "insert_after_erase", "erase",
-            "lookup_hit_default_load_factor", "lookup_miss_hit_default_load_factor",
+            "lookup_hit_default_load_factor", "lookup_miss_default_load_factor",
             "lookup_50%_hit_default_load_factor",
             "lookup_hit_large_max_load_factor", "lookup_miss_large_max_load_factor",
             "lookup_50%_hit_large_max_load_factor",
@@ -1599,7 +1914,7 @@ void ExportToCsv(FILE* export_fp, const std::vector<size_t>& element_num_vec,
                       static_cast<double>(ticks - cpu_timer.overhead_ticks());
                 // may be negative because of timeout
                 latency_ns = std::max(0.0, latency_ns);
-                fprintf(export_fp, "%.3lf", latency_ns);
+                fprintf(export_fp, "%lf", latency_ns);
                 if (i + 1UL == std::tuple_size_v<HistResultsArray>
                         && j + 1UL == PERCENTAGE_NUM) {
                     fprintf(export_fp, "\n");
@@ -1614,6 +1929,12 @@ void ExportToCsv(FILE* export_fp, const std::vector<size_t>& element_num_vec,
     fclose(export_fp);
 }
 
+bool IsStringOnlyHash(const std::string& hash_name) {
+    if (hash_name == "xxHash_xxh3") {
+        return true;
+    }
+    return false;
+}
 
 void BenchTest(size_t seed, const char* data_dir) {
 //    TestRNG();
@@ -1642,29 +1963,53 @@ void BenchTest(size_t seed, const char* data_dir) {
 #   endif
 #endif
 
+#ifdef ENABLE_THP_ALLOC
+#   if ENABLE_THP_ALLOC
+    fprintf(stderr, "Transparent Huge Page enabled\n");
+#   endif
+#endif
+
+    // When test memory size, half of the size has a 0.4 load factor, the other
+    // half has a 0.6 load factor.
+#ifdef USE_COUNT_ALLOC
+    std::vector<size_t> key_size_array = {
+            32UL, 96UL, 153UL, 409UL, 614UL, 819UL, 1'228UL,
+            1'638UL, 2'457UL, 3'276UL, 4'915UL, 6'553UL, 9'830UL, 13'107UL, 19'660UL,
+            26'214UL, 39'321UL, 52'428UL, 78'643UL, 104'857UL, 157'286UL,
+            209'715UL, 314'572UL, 419'430UL, 629'145UL, 838'860UL, 1'258'291UL,
+            1'677'721UL, 2'516'582UL, 3'355'443UL,
+            5'033'164UL, 6'710'886UL, 10'000'000UL,
+    };
+
+#else
+    // Add some special key num like power of 2
     std::vector<size_t> key_size_array = {
         32UL, 110UL, 240UL, 500UL, 800UL, 1024UL, 1500UL,
         2048UL, 3000UL, 6000UL,
         8192UL, 12000UL,16384UL, 25000UL,
         32768UL, 45000UL, 60000UL,
         100000UL, 150000UL, 200000UL, 300000UL, 400000UL, 600000UL,
-        800000UL, 1200000UL,
+        800000UL,
+        1200000UL,
         2200000UL, 3100000UL, 6000000UL,
         10000000UL
     };
+#endif
 
     fprintf(stderr, "\n------ Begin to test hash %s with map %s ---\n", HASH_NAME, MAP_NAME);
 
-    {
+
+
+
+
 
 #ifndef BENCH_ONLY_STRING
-
-
-
+    if (!IsStringOnlyHash(hash_name)) {
         {
             fprintf(stderr, "\nTest Mid split bits masked distributed uint64 key\n\n");
             std::string data_file_name =
-                    map_name + "__" + hash_name + "__" + "mask_split_bits_uint64_t" + "__" + "uint64_t" +
+                    map_name + "__" + hash_name + "__" + "mask_split_bits_uint64_t" + "__" +
+                    "uint64_t" +
                     ".csv";
             std::string export_file_path = data_dir_path + data_file_name;
             FILE *export_fp = fopen(export_file_path.c_str(), "w");
@@ -1735,7 +2080,8 @@ void BenchTest(size_t seed, const char* data_dir) {
         }
 
         {
-            fprintf(stderr, "\nTest mid split bits masked distributed uint64 key and 56 bytes payload\n\n");
+            fprintf(stderr,
+                    "\nTest mid split bits masked distributed uint64 key and 56 bytes payload\n\n");
             std::string data_file_name =
                     map_name + "__" + hash_name + "__" + "mask_split_bits_uint64_t" + "__" +
                     "56bytes_payload" + ".csv";
@@ -1751,16 +2097,17 @@ void BenchTest(size_t seed, const char* data_dir) {
             ExportToCsv(export_fp, key_size_array, result_vec,
                         hist_arr_vec, cpu_timer);
         }
+    }
 
 #endif
 
 #ifndef BENCH_ONLY_INT
-
+    {
         {
-            using BigStringRNG = StringRNG<128, true>;
-            fprintf(stderr, "\nTest Long Len String with fixed length 128\n\n");
+            using MidStringRNG = StringRNG<64, PRINTABLE_CHARS, false>;
+            fprintf(stderr, "\nTest Long Random Len String with max length 64\n\n");
             std::string data_file_name =
-                    map_name + "__" + hash_name + "__" + "mid_string_fix_128" + "__" + "uint64_t" +
+                    map_name + "__" + hash_name + "__" + "long_string_max_64" + "__" + "uint64_t" +
                     ".csv";
             std::string export_file_path = data_dir_path + data_file_name;
             FILE *export_fp = fopen(export_file_path.c_str(), "w");
@@ -1769,7 +2116,26 @@ void BenchTest(size_t seed, const char* data_dir) {
                         std::strerror(errno));
                 return;
             }
-            auto [result_vec, hist_arr_vec] = TestOnePairType<std::string, uint64_t, BigStringRNG, UniformUint64RNG>(
+            auto [result_vec, hist_arr_vec] = TestOnePairType<std::string, uint64_t, MidStringRNG, UniformUint64RNG>(
+                    seed, key_size_array, cpu_timer);
+            ExportToCsv(export_fp, key_size_array, result_vec,
+                        hist_arr_vec, cpu_timer);
+        }
+
+        {
+            using MidStringRNG = StringRNG<64, SPLIT_MASK_BYTES, true>;
+            fprintf(stderr, "\nTest Long Len String with fixed length 64\n\n");
+            std::string data_file_name =
+                    map_name + "__" + hash_name + "__" + "long_string_fix_64" + "__" + "uint64_t" +
+                    ".csv";
+            std::string export_file_path = data_dir_path + data_file_name;
+            FILE *export_fp = fopen(export_file_path.c_str(), "w");
+            if (export_fp == nullptr) {
+                fprintf(stderr, "Error when create file at %s\n%s", export_file_path.c_str(),
+                        std::strerror(errno));
+                return;
+            }
+            auto [result_vec, hist_arr_vec] = TestOnePairType<std::string, uint64_t, MidStringRNG, UniformUint64RNG>(
                     seed, key_size_array, cpu_timer);
             ExportToCsv(export_fp, key_size_array, result_vec,
                         hist_arr_vec, cpu_timer);
@@ -1777,7 +2143,7 @@ void BenchTest(size_t seed, const char* data_dir) {
 
         {
             fprintf(stderr, "\nTest Small Random Len String with max length 12\n\n");
-            using SmallStringRNG = StringRNG<12, false>;
+            using SmallStringRNG = StringRNG<12, PRINTABLE_CHARS, false>;
             std::string data_file_name =
                     map_name + "__" + hash_name + "__" + "small_string_max_12" + "__" + "uint64_t" +
                     ".csv";
@@ -1796,7 +2162,7 @@ void BenchTest(size_t seed, const char* data_dir) {
 
         {
             fprintf(stderr, "\nTest Small String with fixed length 12\n\n");
-            using SmallStringRNG = StringRNG<12, true>;
+            using SmallStringRNG = StringRNG<12, SPLIT_MASK_BYTES, true>;
             std::string data_file_name =
                     map_name + "__" + hash_name + "__" + "small_string_fix_12" + "__" + "uint64_t" +
                     ".csv";
@@ -1813,11 +2179,15 @@ void BenchTest(size_t seed, const char* data_dir) {
                         hist_arr_vec, cpu_timer);
         }
 
+
         {
-            using MidStringRNG = StringRNG<56, false>;
-            fprintf(stderr, "\nTest Mid Random Len String with max length 56\n\n");
+            constexpr size_t TEST_LEN = 24;
+            using MidStringRNG = StringRNG<TEST_LEN, PRINTABLE_CHARS, false>;
+            fprintf(stderr, "\nTest Mid Random Len String with max length %zu\n\n",
+                    TEST_LEN);
             std::string data_file_name =
-                    map_name + "__" + hash_name + "__" + "mid_string_max_56" + "__" + "uint64_t" +
+                    map_name + "__" + hash_name + "__" + "mid_string_max_" +
+                    std::to_string(TEST_LEN) + "__" + "uint64_t" +
                     ".csv";
             std::string export_file_path = data_dir_path + data_file_name;
             FILE *export_fp = fopen(export_file_path.c_str(), "w");
@@ -1833,10 +2203,13 @@ void BenchTest(size_t seed, const char* data_dir) {
         }
 
         {
-            using MidStringRNG = StringRNG<56, true>;
-            fprintf(stderr, "\nTest Mid Len String with fixed length 56\n\n");
+            constexpr size_t TEST_LEN = 24;
+            using MidStringRNG = StringRNG<TEST_LEN, SPLIT_MASK_BYTES, true>;
+            fprintf(stderr, "\nTest Mid Len String with fixed length %zu\n\n",
+                    TEST_LEN);
             std::string data_file_name =
-                    map_name + "__" + hash_name + "__" + "mid_string_fix_56" + "__" + "uint64_t" +
+                    map_name + "__" + hash_name + "__" + "mid_string_fix_" +
+                    std::to_string(TEST_LEN) + "__" + "uint64_t" +
                     ".csv";
             std::string export_file_path = data_dir_path + data_file_name;
             FILE *export_fp = fopen(export_file_path.c_str(), "w");
@@ -1852,8 +2225,47 @@ void BenchTest(size_t seed, const char* data_dir) {
         }
 
 
-#endif
+
+//        {
+//            using BigStringRNG = StringRNG<128, SPLIT_MASK_BYTES, true>;
+//            fprintf(stderr, "\nTest Big String with fixed length 128\n\n");
+//            std::string data_file_name =
+//                    map_name + "__" + hash_name + "__" + "big_string_fix_128" + "__" + "uint64_t" +
+//                    ".csv";
+//            std::string export_file_path = data_dir_path + data_file_name;
+//            FILE *export_fp = fopen(export_file_path.c_str(), "w");
+//            if (export_fp == nullptr) {
+//                fprintf(stderr, "Error when create file at %s\n%s", export_file_path.c_str(),
+//                        std::strerror(errno));
+//                return;
+//            }
+//            auto [result_vec, hist_arr_vec] = TestOnePairType<std::string, uint64_t, BigStringRNG, UniformUint64RNG>(
+//                    seed, key_size_array, cpu_timer);
+//            ExportToCsv(export_fp, key_size_array, result_vec,
+//                        hist_arr_vec, cpu_timer);
+//        }
+//
+//        {
+//            using BigStringRNG = StringRNG<128, SPLIT_MASK_BYTES, false>;
+//            fprintf(stderr, "\nTest Big String with max length 128\n\n");
+//            std::string data_file_name =
+//                    map_name + "__" + hash_name + "__" + "big_string_max_128" + "__" + "uint64_t" +
+//                    ".csv";
+//            std::string export_file_path = data_dir_path + data_file_name;
+//            FILE *export_fp = fopen(export_file_path.c_str(), "w");
+//            if (export_fp == nullptr) {
+//                fprintf(stderr, "Error when create file at %s\n%s", export_file_path.c_str(),
+//                        std::strerror(errno));
+//                return;
+//            }
+//            auto [result_vec, hist_arr_vec] = TestOnePairType<std::string, uint64_t, BigStringRNG, UniformUint64RNG>(
+//                    seed, key_size_array, cpu_timer);
+//            ExportToCsv(export_fp, key_size_array, result_vec,
+//                        hist_arr_vec, cpu_timer);
+//        }
     }
+#endif
+
 
 
 
