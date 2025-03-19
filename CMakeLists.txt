@@ -7,9 +7,11 @@ set(ABSL_PROPAGATE_CXX_STD 17)
 set(MEMCHECK_FLAGS "-fsanitize=address -fno-omit-frame-pointer -fno-optimize-sibling-calls")
 set(MEMCHECK_FLAGS "")
 
-# for Apple Silicon
+# Set potential support for SIMD
 if (APPLE)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mcpu=native")
+elseif (NOT MSVC)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=native")
 endif()
 
 if (NOT MSVC)
