@@ -13,6 +13,11 @@
 #include "utils/histogram_wrapper.h"
 #include "ska_flat_hash_map/flat_hash_map.hpp"
 
+// Add macOS QoS headers
+#if defined(__APPLE__)
+#include <pthread.h>
+#endif
+
 #ifndef FPH_HAVE_BUILTIN
 #ifdef __has_builtin
 #define FPH_HAVE_BUILTIN(x) __has_builtin(x)
@@ -1937,6 +1942,11 @@ bool IsStringOnlyHash(const std::string& hash_name) {
 }
 
 void BenchTest(size_t seed, const char* data_dir) {
+#if defined(__APPLE__)
+    // Set QoS to highest priority for benchmark on macOS
+    pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+    fprintf(stderr, "Set macOS QoS to USER_INTERACTIVE for benchmark process\n");
+#endif
 //    TestRNG();
     using UniformUint64RNG = MaskedUint64RNG<UNIFORM>;
 #ifndef BENCH_ONLY_STRING
