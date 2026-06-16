@@ -5,6 +5,9 @@ functions in C++, attempting to evaluate the performance of the lookup,
 insertion, deletion, iteration, etc. on different data as comprehensively as
 possible.
 
+📊 **Full results with interactive charts and per-operation analysis are
+published on the blog: [Hash Table Benchmark](https://renzibei.com/en/hashtable-bench/).**
+
 ## Before viewing the results
 
 If one is familiar enough with the world of hash tables, he/she will know that
@@ -282,6 +285,10 @@ combinations, and there are still many combinations and spaces that we have not
 tested.
 
 ## Results
+
+> A more complete, up-to-date write-up of these benchmarks — with interactive
+> charts and per-operation analysis — is published on the blog:
+> [Hash Table Benchmark](https://renzibei.com/en/hashtable-bench/).
 
 Here we show part of the test results. For complete test results, users can visualize the csv data using the tools we
 provide.
