@@ -142,17 +142,20 @@ Below is the hash function list we tested
 | robin_hood::hash        | Normal | For integer keys, it use xor-shift, multiplication, xor-shift; For string keys it is similar to MurmurHash                     | https://github.com/martinus/robin-hood-hashing |
 | xxHash_xxh3             | Bytes  | Designed for string; We use identity hash for integer type to pass compilation; Results on integer keys will not be displayed. | https://github.com/Cyan4973/xxHash             |
 
-Originally we have some seed hash functions in the tests, which are hash
-functions that take both a key and a seed as the arguments. We remove these hash
-functions to keep the test subjects simple, and we use the no-seed version of
-all the hash tables.
+The four hash functions above are the current default test set. The benchmark
+also ships some extra hash functions that are kept outside the default set: seed
+hash functions such as `fph::SimpleSeedHash` (which take both a key and a seed as
+arguments, under `src/seed-hashes/`) and `uint128_mul::hash` (under
+`src/backup-hashes/`). They were moved out of the default set to keep the test
+subjects simple, but they still appear in the historical results shown later in
+this document.
 
 We will not show the results of hash `xxHash_xxh3` in tests on integer keys.
-For the early versions of `absl::Hash`, the behavior on arm64 platform is
-different from that on x86-64 platform, and it was poor for some datasets. So
-we once had a `uint128_mul::hash` to compare with it, which is similar to the
-`absl::Hash` on x86-64 platform. Since the newest version of `absl::Hash` has
-fixed this problem. We deleted the `uint128_mul::hash`.
+For the early versions of `absl::Hash`, the behavior on the arm64 platform was
+different from that on the x86-64 platform, and it was poor for some datasets.
+This is why `uint128_mul::hash` (which is similar to `absl::Hash` on x86-64) was
+used as a comparison on arm64 in those earlier results. The newest version of
+`absl::Hash` has since fixed this problem.
 
 The following table lists the hash tables we tested, some of these hash tables
 rely on a "good" hash function to work properly, which can generate hash values
@@ -185,7 +188,7 @@ Here are the hash maps we tested.
 | emhash::HashMap7              | Yes                        | Fast in lookup hit operations.                                                                                         | https://github.com/ktprime/emhash          |
 | fph::DynamicFphMap            | No                         | A dynamic perfect hash table; Ultra-fast in lookup but slow in insert; 2~8 bits per element memory overhead            | https://github.com/renzibei/fph-table      |
 | fph::MetaFphMap               | No                         | A dynamic perfect hash table using metadata; Better than fph::DynamicFphMap in the miss lookup case.                   | https://github.com/renzibei/fph-table      |
-| robin_hood:unordered_flat_map | Yes                        | A table using robin hood hash;                                                                                         |                                            |
+| robin_hood::unordered_flat_map | Yes                       | A table using robin hood hash;                                                                                         |                                            |
 
 \* Note: For the tested libc++ and libstdc++ version, the libc++ implementation
 requires a good hash function but no such requirement for libstdc++.
@@ -233,8 +236,9 @@ cd ../tools
 python3 run_bench.py seed export_results_directory_path
 ```
 
-The results of the tests will be in the format of `csv` files. You can use the jupyter notebook
-`tools/analyze_results.ipynb`  to parse and generate plots of the results.
+The results of the tests will be in the format of `csv` files. You can use the headless script
+`tools/gen_charts.py` (or the jupyter notebook `tools/analyze_results.ipynb`) to parse and
+generate plots of the results.
 
 ## Features
 
@@ -293,6 +297,12 @@ tested.
 Here we show part of the test results. For complete test results, users can visualize the csv data using the tools we
 provide.
 
+Note: the figures in this section are a representative snapshot from an earlier
+run (AMD 3990X and Apple M1 Max, around early 2022) and include the extra
+seed/backup hash functions described above. Benchmark numbers naturally go out of
+date as the code is re-run on newer hardware, so treat them as illustrative; see
+the blog link above for the current results.
+
 For throughput data, performance will be represented by the average time per
 operation. We will plot the average time per operation for different scales of
 data. The shorter the time, the better the performance.
@@ -302,8 +312,8 @@ time as zero, and that data point won't be plotted.
 
 ### Testing Platform
 
-Platform 1: Intel(R) Xeon(R) E-2286G CPU @ 4.00GHz, boost to 4.6 GHz;
-32 GB 2666 MHz dual channel DDR4 RAM; Ubuntu 20.04; gcc 9.4.0; x86-64; Coffee Lake;
+Platform 1: AMD Ryzen Threadripper 3990X, base 2.9 GHz, turbo boost 4.2 GHz;
+3200 MHz DDR4 RAM; Ubuntu 20.04; gcc 10.2.0; x86-64; Zen2;
 
 Platform 2: M1 Max Macbook Pro 16 inch, 2021; 64 GB quad channel LPDDR5 RAM;
 macOS 12.1; clang 13.1.6; arm64; Firestorm;
