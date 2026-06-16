@@ -2,3 +2,12 @@
 cmake-*/
 .DS_Store
 build/
+tmpbuild/
+
+# Generated chart artifacts — regenerated from the CSV source via tools/gen_charts.py
+results/**/figs/
+results/**/chart_js/
+
+# Python
+__pycache__/
+*.pyc
