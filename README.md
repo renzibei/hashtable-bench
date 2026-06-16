@@ -296,8 +296,9 @@ tested.
 > charts and per-operation analysis — is published on the blog:
 > [Hash Table Benchmark](https://renzibei.com/en/hashtable-bench/).
 
-Here we show part of the test results. For complete test results, users can visualize the csv data using the tools we
-provide.
+Here we show part of the test results. For complete test results, users can visualize the raw
+[CSV data](https://github.com/renzibei/hashtable-bench/tree/master/results) (under `results/`) using
+the tools we provide.
 
 Note: the figures in this section are a representative snapshot from an earlier
 run (AMD 3990X and Apple M1 Max, around early 2022) and include the extra
