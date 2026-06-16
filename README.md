@@ -6,8 +6,8 @@ insertion, deletion, iteration, etc. on different data as comprehensively as
 possible.
 
 📊 **Full results with interactive charts and per-operation analysis — run on
-additional, newer hardware (Apple M1 Max and Intel Xeon E-2388G / Rocket Lake) —
-are published on the blog:
+additional hardware (Apple M1 Max and Intel Xeon E-2388G / Rocket Lake) — are
+published on the blog:
 [Hash Table Benchmark](https://renzibei.com/en/hashtable-bench/).**
 
 ## Before viewing the results
@@ -302,9 +302,9 @@ provide.
 Note: the figures in this section are a representative snapshot from an earlier
 run (AMD 3990X and Apple M1 Max, around early 2022) and include the extra
 seed/backup hash functions described above. Benchmark numbers naturally go out of
-date as the code is re-run on newer hardware, so treat them as illustrative; see
-the blog link above for the current results, which were collected on different,
-newer hardware (Apple M1 Max and Intel Xeon E-2388G, Rocket Lake).
+date as the code is re-run on other hardware, so treat them as illustrative; see
+the blog link above for the current results, which were collected on different
+hardware (Apple M1 Max and Intel Xeon E-2388G, Rocket Lake).
 
 For throughput data, performance will be represented by the average time per
 operation. We will plot the average time per operation for different scales of
